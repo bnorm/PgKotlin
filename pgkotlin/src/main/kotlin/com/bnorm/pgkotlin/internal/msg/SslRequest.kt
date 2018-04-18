@@ -1,0 +1,22 @@
+package com.bnorm.pgkotlin.internal.msg
+
+import okio.BufferedSink
+import okio.BufferedSource
+
+/**
+ * See [PostgreSQL message formats](https://www.postgresql.org/docs/current/static/protocol-message-formats.html)
+ *
+ * <pre>
+ * SSLRequest (F)
+ *   Int32(8)
+ *     Length of message contents in bytes, including self.
+ *   Int32(80877103)
+ *     The SSL request code. The value is chosen to contain 1234 in the most significant 16 bits, and 5679 in the least significant 16 bits. (To avoid confusion, this code must not be the same as any protocol version number.)
+ * </pre>
+ */
+internal object SslRequest : Request {
+  override val id: Int = -1
+  override fun encode(sink: BufferedSink) {
+    sink.writeInt(80877103)
+  }
+}
