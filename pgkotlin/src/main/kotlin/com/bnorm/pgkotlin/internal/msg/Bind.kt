@@ -34,12 +34,14 @@ import okio.ByteString
  *     The result-column format codes. Each must presently be zero (text) or one (binary).
  */
 internal data class Bind(
-  val params: List<ByteString?>
+  private val params: List<ByteString?>,
+  private val preparedStatement: String = "",
+  private val portal: String = ""
 ) : Request {
   override val id: Int = 'B'.toInt()
   override fun encode(sink: BufferedSink) {
-    sink.writeByte(0) // portal
-    sink.writeByte(0) // prepared statement
+    sink.writeTerminatedString(portal)
+    sink.writeTerminatedString(preparedStatement)
     sink.writeShort(0) // format codes
     sink.writeShort(params.size)
     for (param in params) {

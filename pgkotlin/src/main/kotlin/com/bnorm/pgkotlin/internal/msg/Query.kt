@@ -16,11 +16,10 @@ import okio.BufferedSink
  * </pre>
  */
 internal data class Query(
-  val sql: String
+  private val sql: String
 ) : Request {
   override val id: Int = 'Q'.toInt()
   override fun encode(sink: BufferedSink) {
-    sink.write(sql.toByteArray())
-    sink.writeByte(0)
+    sink.writeTerminatedString(sql)
   }
 }

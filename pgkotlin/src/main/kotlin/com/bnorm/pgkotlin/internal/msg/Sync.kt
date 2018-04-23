@@ -17,4 +17,8 @@ internal object Sync : Request {
   override val id: Int = 'S'.toInt()
   override fun encode(sink: BufferedSink) {
   }
+
+  override fun toString(): String {
+    return "Sync"
+  }
 }

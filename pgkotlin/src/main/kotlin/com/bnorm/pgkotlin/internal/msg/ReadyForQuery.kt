@@ -16,7 +16,9 @@ import okio.BufferedSource
  *      Current backend transaction status indicator. Possible values are 'I' if idle (not in a transaction block); 'T' if in a transaction block; or 'E' if in a failed transaction block (queries will be rejected until block is ended).
  * </pre>
  */
-internal data class ReadyForQuery(val tx: TxStatus) : Message {
+internal data class ReadyForQuery(
+  val tx: TxStatus
+) : Message {
   override val id: Int = Companion.id
 
   enum class TxStatus {

@@ -1,7 +1,6 @@
 package com.bnorm.pgkotlin.internal.msg
 
 import okio.BufferedSink
-import okio.BufferedSource
 
 /**
  * See [PostgreSQL message formats](https://www.postgresql.org/docs/current/static/protocol-message-formats.html)
@@ -17,20 +16,20 @@ import okio.BufferedSource
  *   String
  *     The query string to be parsed.
  *   Int16
- *     The number of parameter data types specified (can be zero). Note that this is not an indication of the number of parameters that might appear in the query string, only the number that the frontend wants to prespecify types for.
+ *     The number of parameter data types specified (can be zero). Note that this is not an indication of the number of parameters that might appear in the query string, only the number that the frontend wants to pre-specify types for.
  *   Then, for each parameter, there is the following:
  *   Int32
  *     Specifies the object ID of the parameter data type. Placing a zero here is equivalent to leaving the type unspecified.
  * </pre>
  */
 internal data class Parse(
-  val sql: String
+  private val sql: String,
+  private val preparedStatement: String = ""
 ) : Request {
   override val id: Int = 'P'.toInt()
   override fun encode(sink: BufferedSink) {
-    sink.writeByte(0) // prepared statement
-    sink.write(sql.toByteArray())
-    sink.writeByte(0)
+    sink.writeTerminatedString(preparedStatement)
+    sink.writeTerminatedString(sql)
     sink.writeShort(0) // no parameter types
   }
 }

@@ -19,8 +19,8 @@ import okio.Okio
  * </pre>
  */
 internal data class PasswordMessage private constructor(
-  val password: String,
-  val hash: ByteString?
+  private val password: String,
+  private val hash: ByteString?
 ) : Request {
   override val id: Int = 'p'.toInt()
   override fun encode(sink: BufferedSink) {

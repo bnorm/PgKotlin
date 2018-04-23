@@ -28,9 +28,9 @@ import okio.BufferedSink
  * </pre>
  */
 internal data class StartupMessage(
-  val protocol: Int = 196608,
-  val username: String,
-  val database: String
+  private val protocol: Int = 196608,
+  private val username: String,
+  private val database: String
 ) : Request {
   override val id: Int = -1
   override fun encode(sink: BufferedSink) {
@@ -41,8 +41,7 @@ internal data class StartupMessage(
       "database", database,
       "client_encoding", "UTF8"
     )) {
-      sink.write(str.toByteArray())
-      sink.writeByte(0)
+      sink.writeTerminatedString(str)
     }
 
     sink.writeByte(0)

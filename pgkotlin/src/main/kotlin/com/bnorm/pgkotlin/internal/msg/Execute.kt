@@ -1,7 +1,6 @@
 package com.bnorm.pgkotlin.internal.msg
 
 import okio.BufferedSink
-import okio.BufferedSource
 
 /**
  * See [PostgreSQL message formats](https://www.postgresql.org/docs/current/static/protocol-message-formats.html)
@@ -18,10 +17,13 @@ import okio.BufferedSource
  *     Maximum number of rows to return, if portal contains a query that returns rows (ignored otherwise). Zero denotes "no limit".
  * </pre>
  */
-internal object Execute : Request {
+internal data class Execute(
+  private val name: String = "",
+  private val rows: Int = 0
+) : Request {
   override val id: Int = 'E'.toInt()
   override fun encode(sink: BufferedSink) {
-    sink.writeByte(0)
-    sink.writeInt(0)
+    sink.writeTerminatedString(name)
+    sink.writeInt(rows)
   }
 }

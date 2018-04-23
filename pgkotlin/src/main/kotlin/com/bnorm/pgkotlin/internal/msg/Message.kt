@@ -30,6 +30,10 @@ internal fun BufferedSource.readTerminatedString(): String {
   return String(iterator.toList().toByteArray())
 }
 
+internal fun BufferedSink.writeTerminatedString(utf8: String) {
+  writeUtf8(utf8)
+  writeByte(0)
+}
 
 internal fun Request.writeTo(sink: BufferedSink) {
   if (id > 0) sink.writeByte(id)

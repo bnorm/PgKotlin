@@ -17,10 +17,13 @@ import okio.BufferedSink
  *     The name of the prepared statement or portal to close (an empty string selects the unnamed prepared statement or portal).
  * </pre>
  */
-internal object Close : Request {
+internal data class Close(
+  private val type: StatementType,
+  private val name: String = ""
+) : Request {
   override val id: Int = 'C'.toInt()
   override fun encode(sink: BufferedSink) {
-    sink.writeByte('S'.toInt())
-    sink.writeByte(0)
+    sink.writeByte(type.code)
+    sink.writeTerminatedString(name)
   }
 }
