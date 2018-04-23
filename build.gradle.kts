@@ -3,7 +3,7 @@ import org.jetbrains.kotlin.gradle.dsl.KotlinJvmProjectExtension
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
-  kotlin("jvm") version "1.2.31"
+  kotlin("jvm") version "1.2.40"
 
   id("nebula.release") version "6.3.0"
   // id("nebula.project") version "3.4.1"
