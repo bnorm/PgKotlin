@@ -1,6 +1,4 @@
-package com.bnorm.pgkotlin
-
-import com.bnorm.pgkotlin.internal.PgType
+package com.bnorm.pgkotlin.internal
 
 data class Column<T : Any>(val name: String, val type: PgType<T>)
 

@@ -1,6 +1,5 @@
 package com.bnorm.pgkotlin.internal
 
-import com.bnorm.pgkotlin.Type
 import okio.ByteString
 import java.time.*
 import java.time.format.DateTimeFormatter
@@ -17,6 +16,7 @@ private val types = listOf(
   PgShort,
   PgInteger,
   PgText,
+  PgOid,
   PgJson,
   PgFloat,
   PgDouble,
@@ -33,7 +33,7 @@ private val types = listOf(
 private val byType = types.associateBy { it.type }
 private val byOid = types.associateBy { it.oid }
 
-internal fun Int.toPgType(): PgType<*> = byOid[this] ?: TODO("unknown = $this")
+internal fun Int.toPgType(): PgType<*> = byOid[this] ?: PgDefault
 internal fun <T : Any> KClass<out T>.toPgType(): PgType<T> = (byType[this] as? PgType<T>) ?: TODO()
 
 abstract class PgType<T : Any>(
@@ -41,10 +41,11 @@ abstract class PgType<T : Any>(
   override val type: KClass<T>
 ) : Type<T>
 
-private object PgNothing : PgType<Nothing>(0, Nothing::class) {
-  override fun decode(value: ByteString) = TODO()
-  override fun encode(value: Nothing) = TODO()
+private object PgDefault : PgType<ByteString>(0, ByteString::class) {
+  override fun decode(value: ByteString) = value
+  override fun encode(value: ByteString) = value
 }
+
 
 private object PgBool : PgType<Boolean>(16, Boolean::class) {
   val TRUE = ByteString.of('t'.toByte())!!
@@ -97,7 +98,11 @@ private object PgText : PgType<String>(25, String::class) {
   override fun encode(value: String) = ByteString.encodeUtf8(value)!!
 }
 
-//_oid	26
+private object PgOid : PgType<ByteString>(26, ByteString::class) {
+  override fun decode(value: ByteString) = value
+  override fun encode(value: ByteString) = value
+}
+
 //_tid	27
 //_xid	28
 //_cid	29
@@ -213,9 +218,9 @@ private object PgUuid : PgType<UUID>(2950, UUID::class) {
 //_regconfig	3734
 //_regdictionary	3769
 
-private object PgJsonBinary : PgType<ByteString>(3802, ByteString::class) {
-  override fun decode(value: ByteString) = value
-  override fun encode(value: ByteString) = value
+private object PgJsonBinary : PgType<String>(3802, String::class) {
+  override fun decode(value: ByteString) = value.utf8()!!
+  override fun encode(value: String) = ByteString.encodeUtf8(value)!!
 }
 
 //_int4range	3904

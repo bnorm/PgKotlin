@@ -1,11 +1,10 @@
 package com.bnorm.pgkotlin
 
 import okio.ByteString
-import kotlin.reflect.KClass
 
-interface Type<T : Any> {
+interface TypeAdapter<T> {
   val oid: Int
-  val type: KClass<T>
+
   fun decode(value: ByteString): T
   fun encode(value: T): ByteString
 }

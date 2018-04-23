@@ -1,6 +1,7 @@
 package com.bnorm.pgkotlin
 
 import com.bnorm.pgkotlin.internal.PgProtocolException
+import com.bnorm.pgkotlin.internal.Results
 import org.intellij.lang.annotations.Language
 
 interface QueryExecutor {

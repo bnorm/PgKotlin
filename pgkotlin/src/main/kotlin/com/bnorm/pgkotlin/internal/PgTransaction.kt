@@ -1,7 +1,6 @@
 package com.bnorm.pgkotlin.internal
 
 import com.bnorm.pgkotlin.QueryExecutor
-import com.bnorm.pgkotlin.Results
 import com.bnorm.pgkotlin.Transaction
 
 internal class PgTransaction(
