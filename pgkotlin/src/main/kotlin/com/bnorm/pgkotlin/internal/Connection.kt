@@ -2,6 +2,7 @@ package com.bnorm.pgkotlin.internal
 
 import com.bnorm.pgkotlin.NotificationChannel
 import com.bnorm.pgkotlin.QueryExecutor
+import com.bnorm.pgkotlin.Response
 import com.bnorm.pgkotlin.Transaction
 import com.bnorm.pgkotlin.internal.msg.*
 import kotlinx.coroutines.experimental.NonCancellable
@@ -13,7 +14,6 @@ import kotlinx.coroutines.experimental.runBlocking
 import kotlinx.coroutines.experimental.withContext
 import okio.Buffer
 import org.intellij.lang.annotations.Language
-import java.io.EOFException
 import java.io.IOException
 import java.net.InetSocketAddress
 import java.nio.ByteBuffer
@@ -59,7 +59,7 @@ internal class Connection(
     @Language("PostgreSQL") sql: String,
     vararg params: Any,
     rows: Int = 0
-  ): Portal? {
+  ): Response {
     requests.send(Parse(sql))
     requests.send(Bind(params.map { it::class.toPgType().encode(it) }))
     requests.send(Describe(StatementType.Portal))
@@ -72,15 +72,17 @@ internal class Connection(
     val first = responses.receive()
     when (first) {
       is CommandComplete -> {
-        return null
+        responses.expect<ReadyForQuery>()
+        return Response.Empty
       }
       is EmptyQueryResponse -> {
-        return null
+        responses.expect<ReadyForQuery>()
+        return Response.Empty
       }
       is RowDescription -> {
         // Buffer 1 less than the number of possible rows to keep additional
-        // executions being sent
-        return object : Portal(first, produce<DataRow>(
+        // executions from being sent
+        return Response.Stream(object : Portal(first, produce<DataRow>(
           capacity = (rows - 1).coerceAtLeast(0)
         ) {
           for (msg in responses) {
@@ -118,7 +120,7 @@ internal class Connection(
               }
             }
           }
-        }
+        })
       }
       else -> throw PgProtocolException("msg=$first")
     }
@@ -126,50 +128,41 @@ internal class Connection(
 
   override suspend fun query(
     @Language("PostgreSQL") sql: String,
-    vararg params: Any
-  ): Results {
+    vararg params: Any?
+  ): Response {
     if (params.isEmpty()) {
       requests.send(Query(sql))
     } else {
       requests.send(Parse(sql))
-      requests.send(Bind(params.map { it::class.toPgType().encode(it) }))
+      requests.send(Bind(params.map { it.pgEncode() }))
       requests.send(Describe(StatementType.Prepared))
       requests.send(Execute())
       requests.send(Close(StatementType.Prepared))
       requests.send(Sync)
+
+      responses.expect<ParseComplete>()
+      responses.expect<BindComplete>()
     }
 
     // TODO(bnorm): is there a way to stream this?
-    val columns = mutableListOf<Column<*>>()
-    val rows = mutableListOf<com.bnorm.pgkotlin.internal.Row>()
-    responses@ for (msg in responses) {
-      if (msg is CommandComplete) {
-        break
-      }
-
+    var columns: RowDescription? = null
+    val rows = mutableListOf<DataRow>()
+    for (msg in responses) {
+      if (msg is CommandComplete) break
       when (msg) {
-        is RowDescription -> {
-          for (column in msg.columns) {
-            columns.add(Column(column.name, column.type))
-          }
-        }
-        is DataRow -> {
-          rows.add(com.bnorm.pgkotlin.internal.Row(msg.values.zip(columns) { value, column ->
-            value?.let {
-              try {
-                column.type.decode(it)
-              } catch (t: Throwable) {
-                throw PgProtocolException(throwable = t)
-              }
-            }
-          }))
-        }
+        is RowDescription -> columns = msg
+        is DataRow -> rows.add(msg)
         else -> throw PgProtocolException("msg=$msg")
       }
     }
 
+    if (params.isNotEmpty()) responses.expect<CloseComplete>()
     responses.expect<ReadyForQuery>()
-    return Results(columns, rows)
+
+    return when (columns) {
+      null -> Response.Empty
+      else -> Response.Complete(columns, rows)
+    }
   }
 
   companion object {
@@ -210,7 +203,7 @@ internal class Connection(
           val buffer = Buffer()
           for (msg in channel) {
             msg.writeTo(buffer)
-            println("sending=$msg")
+//            println("sending=$msg")
             val len = buffer.size().toInt()
             val temp = ByteBuffer.allocate(len)
             buffer.read(temp)
@@ -222,81 +215,27 @@ internal class Connection(
 
       val channels = mutableMapOf<String, BroadcastChannel<String>>()
 
-//      val reader = writer(coroutineContext) {
-//        while (isActive && socket.isOpen) {
-//          channel.writeSuspendSession {
-//            val buffer = request(1)
-//            if (buffer != null) {
-//              val read = socket.aRead(buffer)
-//              written(read)
-//            }
-//          }
-//        }
-//      }
-
-//      val responses = produce<Message>(parent = reader) {
-//        val buffer = Buffer()
-//        val channel = reader.channel
-//
-//        while (isActive) {
-//          val id = channel.readByte()
-//          val length = channel.readInt()
-////          val packet = channel.readPacket(length)
-////          try {
-////            packet.readFully()
-////          } finally {
-////            packet.release()
-////          }
-//          while (buffer.size() < length) {
-//            channel.read(length) { b ->
-//              val copy = b.asReadOnlyBuffer()
-//              copy.limit((length - buffer.size()).toInt())
-//              buffer.write(copy)
-//            }
-//          }
-//
-//          println("received = ${id.toChar()}")
-//          val msg = factories[id.toInt()]?.decode(buffer)
-//          when {
-//            msg is ErrorResponse -> throw IOException("${msg.level}: ${msg.message} (${msg.code})")
-//            msg is NotificationResponse -> channels[msg.channel]?.send(msg.payload)
-//            msg != null -> send(msg)
-//          }
-//        }
-//      }
-
       val responses = produce<Message> {
         val buffer = Buffer()
+        val cursor = Buffer.UnsafeCursor()
 
-        val direct = ByteBuffer.allocateDirect(8192)
         while (socket.isOpen && isActive) {
-          buffer.clear()
-          direct.clear()
-          direct.limit(5)
-          socket.aRequire(direct, 5)
-          direct.flip()
+          while (buffer.size() < 5) socket.aRead(buffer, cursor)
 
-          val id = direct.get()
-          var length = direct.getInt() - 4
-          while (length > 0) {
-            direct.clear()
-            if (length < direct.capacity()) direct.limit(length)
-
-            val read = socket.aRead(direct)
-            if (read > 0) {
-              length -= read
-              direct.flip()
-              buffer.write(direct)
-            }
-          }
+          val id = buffer.readByte()
+          val length = (buffer.readInt() - 4).toLong()
+          while (buffer.size() < length) socket.aRead(buffer, cursor)
 
           val msg = factories[id.toInt()]?.decode(buffer)
-          println("received=$msg")
+//          println("received=$msg")
           when {
             msg is ErrorResponse -> throw IOException("${msg.level}: ${msg.message} (${msg.code})")
             msg is NotificationResponse -> channels[msg.channel]?.send(msg.payload)
             msg != null -> send(msg)
-            else -> println("    unknown=${id.toChar()}")
+            else -> {
+              println("    unknown=${id.toChar()}")
+              buffer.skip(length)
+            }
           }
         }
       }
@@ -333,17 +272,32 @@ private suspend inline fun <reified T : Message> ReceiveChannel<Message>.consume
   }
 }
 
-private suspend fun AsynchronousSocketChannel.aRequire(
-  direct: ByteBuffer,
-  byteCount: Int
-) {
-  require(direct.remaining() >= byteCount)
-  var remaining = byteCount
-  while (remaining > 0) {
-    val read = aRead(direct)
+private suspend fun AsynchronousSocketChannel.aRead(
+  buffer: Buffer,
+  cursor: Buffer.UnsafeCursor
+): Long {
+  buffer.readAndWriteUnsafe(cursor).use {
+    val oldSize = buffer.size()
+    cursor.seek(oldSize)
+
+    val length = 8192
+    cursor.expandBuffer(length)
+    val read = aRead(toByteBuffer(cursor, length))
+
     if (read == -1) {
-      throw EOFException()
+      cursor.resizeBuffer(oldSize)
+      return -1
+    } else {
+      cursor.resizeBuffer(oldSize + read)
+      return read.toLong()
     }
-    remaining -= read
   }
+}
+
+private fun toByteBuffer(
+  cursor: Buffer.UnsafeCursor,
+  length: Int
+): ByteBuffer {
+  require(length <= cursor.end - cursor.start)
+  return ByteBuffer.wrap(cursor.data, cursor.start, length)
 }

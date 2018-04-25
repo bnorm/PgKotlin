@@ -1,7 +1,6 @@
 package com.bnorm.pgkotlin
 
 import com.bnorm.pgkotlin.internal.PgProtocolException
-import com.bnorm.pgkotlin.internal.Results
 import org.intellij.lang.annotations.Language
 
 interface QueryExecutor {
@@ -13,8 +12,8 @@ interface QueryExecutor {
    */
   suspend fun query(
     @Language("PostgreSQL") sql: String,
-    vararg params: Any = emptyArray()
-  ): Results
+    vararg params: Any? = emptyArray()
+  ): Response
 }
 
 interface Transaction : QueryExecutor {

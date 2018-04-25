@@ -35,6 +35,8 @@ private val byOid = types.associateBy { it.oid }
 
 internal fun Int.toPgType(): PgType<*> = byOid[this] ?: PgDefault
 internal fun <T : Any> KClass<out T>.toPgType(): PgType<T> = (byType[this] as? PgType<T>) ?: TODO()
+internal fun Any?.pgEncode(): ByteString? =
+  if (this == null) null else this::class.toPgType().encode(this)
 
 abstract class PgType<T : Any>(
   override val oid: Int,
