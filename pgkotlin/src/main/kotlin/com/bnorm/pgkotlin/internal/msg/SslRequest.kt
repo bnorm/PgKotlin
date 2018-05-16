@@ -19,4 +19,8 @@ internal object SslRequest : Request {
   override fun encode(sink: BufferedSink) {
     sink.writeInt(80877103)
   }
+
+  override fun toString(): String {
+    return "SslRequest"
+  }
 }

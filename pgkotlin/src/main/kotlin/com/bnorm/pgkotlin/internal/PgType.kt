@@ -41,7 +41,11 @@ internal fun Any?.pgEncode(): ByteString? =
 abstract class PgType<T : Any>(
   override val oid: Int,
   override val type: KClass<T>
-) : Type<T>
+) : Type<T> {
+  override fun toString(): String {
+    return "PgType(oid=$oid, type=$type)"
+  }
+}
 
 private object PgDefault : PgType<ByteString>(0, ByteString::class) {
   override fun decode(value: ByteString) = value

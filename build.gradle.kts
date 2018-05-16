@@ -1,9 +1,9 @@
 import org.jetbrains.kotlin.gradle.dsl.Coroutines
-import org.jetbrains.kotlin.gradle.dsl.KotlinJvmProjectExtension
+import org.jetbrains.kotlin.gradle.plugin.KotlinPluginWrapper
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
-  kotlin("jvm") version "1.2.40"
+  kotlin("jvm") version "1.2.41"
 
   id("nebula.release") version "6.3.0"
   // id("nebula.project") version "3.4.1"
@@ -23,10 +23,16 @@ allprojects {
   repositories {
     jcenter()
   }
-}
 
-tasks.withType<KotlinCompile> {
-  kotlinOptions {
-    jvmTarget = "1.8"
+  plugins.withType<KotlinPluginWrapper> {
+    kotlin {
+      experimental.coroutines = Coroutines.ENABLE
+    }
+
+    tasks.withType<KotlinCompile> {
+      kotlinOptions {
+        jvmTarget = "1.8"
+      }
+    }
   }
 }

@@ -5,25 +5,25 @@ import com.bnorm.pgkotlin.QueryExecutor
 import com.bnorm.pgkotlin.Response
 import com.bnorm.pgkotlin.Transaction
 import com.bnorm.pgkotlin.internal.msg.*
-import kotlinx.coroutines.experimental.NonCancellable
+import kotlinx.coroutines.experimental.*
 import kotlinx.coroutines.experimental.channels.*
 import kotlinx.coroutines.experimental.nio.aConnect
 import kotlinx.coroutines.experimental.nio.aRead
 import kotlinx.coroutines.experimental.nio.aWrite
-import kotlinx.coroutines.experimental.runBlocking
-import kotlinx.coroutines.experimental.withContext
 import okio.Buffer
 import org.intellij.lang.annotations.Language
+import java.io.Closeable
 import java.io.IOException
 import java.net.InetSocketAddress
 import java.nio.ByteBuffer
 import java.nio.channels.AsynchronousSocketChannel
+import java.util.concurrent.TimeUnit
 
 internal class Connection(
   private val requests: SendChannel<Request>,
   private val responses: ReceiveChannel<Message>,
   private val channels: MutableMap<String, BroadcastChannel<String>>
-) : QueryExecutor, NotificationChannel {
+) : QueryExecutor, NotificationChannel, Closeable {
 
   override suspend fun listen(channel: String): BroadcastChannel<String> {
     val broadcast = channels.computeIfAbsent(channel) {
@@ -57,33 +57,38 @@ internal class Connection(
 
   suspend fun stream(
     @Language("PostgreSQL") sql: String,
-    vararg params: Any,
-    rows: Int = 0
+    vararg params: Any?,
+    rows: Int = 5
   ): Response {
-    requests.send(Parse(sql))
-    requests.send(Bind(params.map { it::class.toPgType().encode(it) }))
-    requests.send(Describe(StatementType.Portal))
-    requests.send(Execute(rows = rows))
-    requests.send(Sync)
+    if (params.isEmpty()) {
+      requests.send(Query(sql))
+    } else {
+      requests.send(Parse(sql))
+      requests.send(Bind(params.map { it.pgEncode() }))
+      requests.send(Describe(StatementType.Portal))
+      requests.send(Execute(rows = rows))
+      requests.send(Sync)
 
-    responses.expect<ParseComplete>()
-    responses.expect<BindComplete>()
+      responses.require<ParseComplete>()
+      responses.require<BindComplete>()
+    }
 
     val first = responses.receive()
     when (first) {
       is CommandComplete -> {
-        responses.expect<ReadyForQuery>()
+        responses.require<ReadyForQuery>()
         return Response.Empty
       }
       is EmptyQueryResponse -> {
-        responses.expect<ReadyForQuery>()
+        responses.require<ReadyForQuery>()
         return Response.Empty
       }
       is RowDescription -> {
         // Buffer 1 less than the number of possible rows to keep additional
         // executions from being sent
         return Response.Stream(object : Portal(first, produce<DataRow>(
-          capacity = (rows - 1).coerceAtLeast(0)
+          capacity = (rows - 1).coerceAtLeast(0),
+          context = Unconfined
         ) {
           for (msg in responses) {
             when (msg) {
@@ -91,16 +96,16 @@ internal class Connection(
                 send(msg)
               }
               is PortalSuspended -> {
-                responses.expect<ReadyForQuery>()
+                responses.require<ReadyForQuery>()
                 requests.send(Execute(rows = rows))
                 requests.send(Sync)
               }
               is CommandComplete -> {
-                responses.expect<ReadyForQuery>()
+                responses.require<ReadyForQuery>()
                 requests.send(Close(StatementType.Portal))
                 requests.send(Sync)
-                responses.expect<CloseComplete>()
-                responses.expect<ReadyForQuery>()
+                responses.require<CloseComplete>()
+                responses.require<ReadyForQuery>()
                 return@produce
               }
               else -> throw PgProtocolException("msg=$msg")
@@ -116,7 +121,7 @@ internal class Connection(
                 requests.send(Close(StatementType.Portal))
                 requests.send(Sync)
                 responses.consumeUntil<CloseComplete>()
-                responses.expect<ReadyForQuery>()
+                responses.require<ReadyForQuery>()
               }
             }
           }
@@ -135,16 +140,14 @@ internal class Connection(
     } else {
       requests.send(Parse(sql))
       requests.send(Bind(params.map { it.pgEncode() }))
-      requests.send(Describe(StatementType.Prepared))
+      requests.send(Describe(StatementType.Portal))
       requests.send(Execute())
-      requests.send(Close(StatementType.Prepared))
       requests.send(Sync)
 
-      responses.expect<ParseComplete>()
-      responses.expect<BindComplete>()
+      responses.require<ParseComplete>()
+      responses.require<BindComplete>()
     }
 
-    // TODO(bnorm): is there a way to stream this?
     var columns: RowDescription? = null
     val rows = mutableListOf<DataRow>()
     for (msg in responses) {
@@ -156,8 +159,7 @@ internal class Connection(
       }
     }
 
-    if (params.isNotEmpty()) responses.expect<CloseComplete>()
-    responses.expect<ReadyForQuery>()
+    responses.require<ReadyForQuery>()
 
     return when (columns) {
       null -> Response.Empty
@@ -165,9 +167,16 @@ internal class Connection(
     }
   }
 
+  override fun close() {
+    runBlocking {
+      requests.send(Terminate)
+    }
+  }
+
   companion object {
     private val factories = listOf<Message.Factory<*>>(
       Authentication,
+      BackendKeyData,
       BindComplete,
       CloseComplete,
       CommandComplete,
@@ -175,6 +184,8 @@ internal class Connection(
       EmptyQueryResponse,
       ErrorResponse,
       NotificationResponse,
+      ParameterDescription,
+      ParameterStatus,
       ParseComplete,
       PortalSuspended,
       ReadyForQuery,
@@ -198,47 +209,9 @@ internal class Connection(
       val socket = AsynchronousSocketChannel.open()
       socket.aConnect(address)
 
-      val requests = actor<Request> {
-        socket.use { socket ->
-          val buffer = Buffer()
-          for (msg in channel) {
-            msg.writeTo(buffer)
-//            println("sending=$msg")
-            val len = buffer.size().toInt()
-            val temp = ByteBuffer.allocate(len)
-            buffer.read(temp)
-            temp.flip()
-            socket.aWrite(temp)
-          }
-        }
-      }
-
+      val requests = sink(socket)
       val channels = mutableMapOf<String, BroadcastChannel<String>>()
-
-      val responses = produce<Message> {
-        val buffer = Buffer()
-        val cursor = Buffer.UnsafeCursor()
-
-        while (socket.isOpen && isActive) {
-          while (buffer.size() < 5) socket.aRead(buffer, cursor)
-
-          val id = buffer.readByte()
-          val length = (buffer.readInt() - 4).toLong()
-          while (buffer.size() < length) socket.aRead(buffer, cursor)
-
-          val msg = factories[id.toInt()]?.decode(buffer)
-//          println("received=$msg")
-          when {
-            msg is ErrorResponse -> throw IOException("${msg.level}: ${msg.message} (${msg.code})")
-            msg is NotificationResponse -> channels[msg.channel]?.send(msg.payload)
-            msg != null -> send(msg)
-            else -> {
-              println("    unknown=${id.toChar()}")
-              buffer.skip(length)
-            }
-          }
-        }
-      }
+      val responses = source(socket, channels)
 
       // TODO(bnorm) SSL handshake?
       requests.send(StartupMessage(username = username, database = database))
@@ -252,24 +225,69 @@ internal class Connection(
         }
       }
 
-      responses.receive() as? ReadyForQuery ?: throw PgProtocolException()
+      // responses consume BackendKeyData
+      // responses consume ParameterStatus
+
+      responses.consumeUntil<ReadyForQuery>()
 
       return Connection(requests, responses, channels)
     }
-  }
-}
 
-private suspend inline fun <reified T> ReceiveChannel<Message>.expect() {
-  val msg = receive()
-  msg as? T ?: throw PgProtocolException("unexpected=$msg")
-}
+    private fun sink(socket: AsynchronousSocketChannel) = actor<Request> {
+      socket.use { socket ->
+        val buffer = Buffer()
+        val cursor = Buffer.UnsafeCursor()
 
-private suspend inline fun <reified T : Message> ReceiveChannel<Message>.consumeUntil() {
-  for (msg in this) {
-    if (msg is T) {
-      break
+        for (msg in channel) {
+          msg.writeTo(buffer)
+          // println("sending=$msg")
+          socket.aWrite(buffer, buffer.size(), cursor)
+        }
+      }
+    }
+
+    private fun source(
+      socket: AsynchronousSocketChannel,
+      channels: MutableMap<String, BroadcastChannel<String>>
+    ) = produce<Message> {
+      val buffer = Buffer()
+      val cursor = Buffer.UnsafeCursor()
+
+      while (socket.isOpen && isActive) {
+        while (buffer.size() < 5) socket.aRead(buffer, cursor)
+
+        val id = buffer.readByte()
+        val length = (buffer.readInt() - 4).toLong()
+        while (buffer.size() < length) socket.aRead(buffer, cursor)
+
+        val msg = factories[id.toInt()]?.decode(buffer)
+        // println("received=$msg")
+        when {
+          msg is ErrorResponse -> throw IOException("${msg.level}: ${msg.message} (${msg.code})")
+          msg is NotificationResponse -> channels[msg.channel]?.send(msg.payload)
+          msg != null -> send(msg)
+          else -> {
+            println("    unknown=${id.toChar()}")
+            buffer.skip(length)
+          }
+        }
+      }
     }
   }
+}
+
+private suspend inline fun <reified T> ReceiveChannel<Message>.require(): T {
+  val msg = withTimeout(30, TimeUnit.SECONDS) { receive() }
+  return msg as? T ?: throw PgProtocolException("unexpected=$msg")
+}
+
+private suspend inline fun <reified T : Message> ReceiveChannel<Message>.consumeUntil(): T {
+  for (msg in this) {
+    if (msg is T) {
+      return msg
+    }
+  }
+  throw PgProtocolException("not found = ${T::class}")
 }
 
 private suspend fun AsynchronousSocketChannel.aRead(
@@ -278,26 +296,33 @@ private suspend fun AsynchronousSocketChannel.aRead(
 ): Long {
   buffer.readAndWriteUnsafe(cursor).use {
     val oldSize = buffer.size()
-    cursor.seek(oldSize)
+    cursor.expandBuffer(8192)
 
-    val length = 8192
-    cursor.expandBuffer(length)
-    val read = aRead(toByteBuffer(cursor, length))
+    val read = aRead(ByteBuffer.wrap(cursor.data, cursor.start, 8192))
 
     if (read == -1) {
       cursor.resizeBuffer(oldSize)
-      return -1
     } else {
       cursor.resizeBuffer(oldSize + read)
-      return read.toLong()
     }
+    return read.toLong()
   }
 }
 
-private fun toByteBuffer(
-  cursor: Buffer.UnsafeCursor,
-  length: Int
-): ByteBuffer {
-  require(length <= cursor.end - cursor.start)
-  return ByteBuffer.wrap(cursor.data, cursor.start, length)
+suspend fun AsynchronousSocketChannel.aWrite(
+  buffer: Buffer,
+  byteCount: Long,
+  cursor: Buffer.UnsafeCursor = Buffer.UnsafeCursor()
+) {
+  var remaining = byteCount
+  while (remaining > 0) {
+    buffer.readUnsafe(cursor).use {
+      cursor.seek(0)
+
+      val length = minOf(cursor.end - cursor.start, remaining.toInt())
+      val written = aWrite(ByteBuffer.wrap(cursor.data, cursor.start, length))
+      remaining -= written
+      buffer.skip(written.toLong())
+    }
+  }
 }

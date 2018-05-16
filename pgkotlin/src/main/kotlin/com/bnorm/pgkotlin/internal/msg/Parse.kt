@@ -1,5 +1,6 @@
 package com.bnorm.pgkotlin.internal.msg
 
+import com.bnorm.pgkotlin.internal.PgType
 import okio.BufferedSink
 
 /**
@@ -24,12 +25,16 @@ import okio.BufferedSink
  */
 internal data class Parse(
   private val sql: String,
-  private val preparedStatement: String = ""
+  private val preparedStatement: String = "",
+  private val types: List<PgType<*>?> = emptyList()
 ) : Request {
   override val id: Int = 'P'.toInt()
   override fun encode(sink: BufferedSink) {
     sink.writeTerminatedString(preparedStatement)
     sink.writeTerminatedString(sql)
-    sink.writeShort(0) // no parameter types
+    sink.writeShort(types.size)
+    for (type in types) {
+      sink.writeInt(type?.oid ?: 0)
+    }
   }
 }

@@ -4,6 +4,7 @@ import com.bnorm.pgkotlin.internal.Connection
 import kotlinx.coroutines.experimental.async
 import kotlinx.coroutines.experimental.channels.sumBy
 import kotlinx.coroutines.experimental.runBlocking
+import kotlin.math.roundToInt
 import kotlin.system.measureTimeMillis
 
 fun main(args: Array<String>) = runBlocking<Unit> {
@@ -55,25 +56,42 @@ fun main(args: Array<String>) = runBlocking<Unit> {
 //  delay(5, TimeUnit.MINUTES)
 
 
-  var sum: Long = 0
-  val time = measureTimeMillis {
-    sum = List(50) {
-      async {
-        val connection = Connection.connect(
-          hostname = "dev-brian-norman.dc.atavium.com",
-          username = "postgres",
-          database = "postgres"
-        )
+  val connections = List(16) {
+    Connection.connect(
+      hostname = "dev-brian-norman.dc.atavium.com",
+      username = "postgres",
+      database = "postgres"
+    )
+  }
 
-        connection.transaction {
+  try {
+    for (iteration in 1..10) {
+      println("Performance iteration $iteration")
+      performance(connections)
+    }
+  } finally {
+    println("Closing connections")
+    connections.forEach { it.close() }
+  }
+}
+
+private suspend fun performance(connections: List<Connection>) {
+  val (sum, totalTime) = connections.map { connection ->
+    async {
+      connection.transaction {
+        var sum = 0L
+        val time = measureTimeMillis {
           val response = connection.stream(
             "SELECT i FROM generate_series(1, $1) AS i",
             100_000L,
-            rows = 1_000
+            rows = 5_000
           ) as Response.Stream
 
-          response.sumBy { 1 }.toLong()
+          sum = response.sumBy { 1 }.toLong()
         }
+
+        sum to time
+      }
 
 //        val response = connection.query(
 //          "SELECT i FROM generate_series(1, $1) AS i",
@@ -81,10 +99,16 @@ fun main(args: Array<String>) = runBlocking<Unit> {
 //        ) as Response.Complete
 //
 //        response.size.toLong()
-      }
-    }.map {
-      it.await()
-    }.sum()
-  }
-  println("$sum rows in $time ms = ${sum / (time / 1000.0)} rows/sec")
+    }
+  }.map {
+    it.await()
+  }.reduce(::pairwiseSum)
+
+  val time = totalTime / connections.size
+  println("$sum rows in $time ms = ${(sum / (time / 1000.0)).roundToInt()} rows/sec")
 }
+
+private fun pairwiseSum(
+  pair1: Pair<Long, Long>,
+  pair2: Pair<Long, Long>
+) = (pair1.first + pair2.first) to (pair1.second + pair2.second)
