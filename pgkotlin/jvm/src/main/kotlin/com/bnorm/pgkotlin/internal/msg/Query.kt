@@ -20,6 +20,6 @@ internal data class Query(
 ) : Request {
   override val id: Int = 'Q'.toInt()
   override fun encode(sink: BufferedSink) {
-    sink.writeTerminatedString(sql)
+    sink.writeUtf8Terminated(sql)
   }
 }

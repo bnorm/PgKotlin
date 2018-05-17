@@ -30,7 +30,7 @@ internal data class CommandComplete(
   companion object : Message.Factory<CommandComplete> {
     override val id: Int = 'C'.toInt()
     override fun decode(source: BufferedSource): CommandComplete {
-      val query = source.readTerminatedString()
+      val query = source.readUtf8Terminated()
       return CommandComplete(query.split(" ".toRegex()).last().toIntOrNull() ?: 0)
     }
   }

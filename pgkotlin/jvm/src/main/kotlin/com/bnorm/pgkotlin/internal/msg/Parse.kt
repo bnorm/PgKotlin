@@ -30,8 +30,8 @@ internal data class Parse(
 ) : Request {
   override val id: Int = 'P'.toInt()
   override fun encode(sink: BufferedSink) {
-    sink.writeTerminatedString(preparedStatement)
-    sink.writeTerminatedString(sql)
+    sink.writeUtf8Terminated(preparedStatement)
+    sink.writeUtf8Terminated(sql)
     sink.writeShort(types.size)
     for (type in types) {
       sink.writeInt(type?.oid ?: 0)

@@ -24,6 +24,6 @@ internal data class Close(
   override val id: Int = 'C'.toInt()
   override fun encode(sink: BufferedSink) {
     sink.writeByte(type.code)
-    sink.writeTerminatedString(name)
+    sink.writeUtf8Terminated(name)
   }
 }

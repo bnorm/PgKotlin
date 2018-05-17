@@ -31,8 +31,8 @@ internal data class NotificationResponse(
     override fun decode(source: BufferedSource): NotificationResponse {
       return NotificationResponse(
         source.readInt(),
-        source.readTerminatedString(),
-        source.readTerminatedString()
+        source.readUtf8Terminated(),
+        source.readUtf8Terminated()
       )
     }
   }

@@ -38,7 +38,7 @@ internal data class ErrorResponse(
 
       var type = source.readByte()
       while (type != 0.toByte()) {
-        val value = source.readTerminatedString()
+        val value = source.readUtf8Terminated()
         when (type) {
           'S'.toByte() -> level = Level.valueOf(value)
           'C'.toByte() -> code = value

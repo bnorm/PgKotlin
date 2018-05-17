@@ -41,7 +41,7 @@ internal data class StartupMessage(
       "database", database,
       "client_encoding", "UTF8"
     )) {
-      sink.writeTerminatedString(str)
+      sink.writeUtf8Terminated(str)
     }
 
     sink.writeByte(0)

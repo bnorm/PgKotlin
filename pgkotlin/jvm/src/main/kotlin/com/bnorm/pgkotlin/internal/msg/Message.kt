@@ -3,6 +3,7 @@ package com.bnorm.pgkotlin.internal.msg
 import okio.Buffer
 import okio.BufferedSink
 import okio.BufferedSource
+import java.io.IOException
 import kotlin.coroutines.experimental.buildSequence
 
 internal interface Message {
@@ -19,18 +20,16 @@ internal interface Request : Message {
   fun encode(sink: BufferedSink)
 }
 
-internal fun BufferedSource.readTerminatedString(): String {
-  val iterator: Sequence<Byte> = buildSequence {
-    var byte: Byte = readByte()
-    while (byte != 0.toByte()) {
-      yield(byte)
-      byte = readByte()
-    }
+internal fun BufferedSource.readUtf8Terminated(): String {
+  val index = indexOf(0)
+  if (index != -1L) {
+    return readUtf8(index).also { skip(1) }
+  } else {
+    throw IOException("Unterminated string")
   }
-  return String(iterator.toList().toByteArray())
 }
 
-internal fun BufferedSink.writeTerminatedString(utf8: String) {
+internal fun BufferedSink.writeUtf8Terminated(utf8: String) {
   writeUtf8(utf8)
   writeByte(0)
 }

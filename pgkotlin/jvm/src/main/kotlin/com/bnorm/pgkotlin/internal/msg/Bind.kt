@@ -40,8 +40,8 @@ internal data class Bind(
 ) : Request {
   override val id: Int = 'B'.toInt()
   override fun encode(sink: BufferedSink) {
-    sink.writeTerminatedString(portal)
-    sink.writeTerminatedString(preparedStatement)
+    sink.writeUtf8Terminated(portal)
+    sink.writeUtf8Terminated(preparedStatement)
     sink.writeShort(0) // format codes
     sink.writeShort(params.size)
     for (param in params) {

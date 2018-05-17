@@ -240,7 +240,7 @@ internal class Connection(
 
         for (msg in channel) {
           msg.writeTo(buffer)
-          // println("sending=$msg")
+          debug { println("sending=$msg") }
           socket.aWrite(buffer, buffer.size(), cursor)
         }
       }
@@ -261,7 +261,7 @@ internal class Connection(
         while (buffer.size() < length) socket.aRead(buffer, cursor)
 
         val msg = factories[id.toInt()]?.decode(buffer)
-        // println("received=$msg")
+        debug { println("received=$msg") }
         when {
           msg is ErrorResponse -> throw IOException("${msg.level}: ${msg.message} (${msg.code})")
           msg is NotificationResponse -> channels[msg.channel]?.send(msg.payload)

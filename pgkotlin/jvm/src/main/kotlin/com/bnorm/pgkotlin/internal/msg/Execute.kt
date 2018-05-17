@@ -23,7 +23,7 @@ internal data class Execute(
 ) : Request {
   override val id: Int = 'E'.toInt()
   override fun encode(sink: BufferedSink) {
-    sink.writeTerminatedString(name)
+    sink.writeUtf8Terminated(name)
     sink.writeInt(rows)
   }
 }

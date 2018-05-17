@@ -42,7 +42,7 @@ internal data class RowDescription(
     override fun decode(source: BufferedSource): RowDescription {
       val len = source.readShort().toInt()
       val columns = List(len) {
-        val name = source.readTerminatedString()
+        val name = source.readUtf8Terminated()
         source.skip(6)
         val type = source.readInt().toPgType()
         source.skip(8)
