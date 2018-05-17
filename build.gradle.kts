@@ -1,6 +1,6 @@
 import org.jetbrains.kotlin.gradle.dsl.Coroutines
+import org.jetbrains.kotlin.gradle.dsl.KotlinJvmCompile
 import org.jetbrains.kotlin.gradle.plugin.KotlinPluginWrapper
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
   kotlin("jvm") version "1.2.41"
@@ -29,7 +29,7 @@ allprojects {
       experimental.coroutines = Coroutines.ENABLE
     }
 
-    tasks.withType<KotlinCompile> {
+    tasks.withType<KotlinJvmCompile> {
       kotlinOptions {
         jvmTarget = "1.8"
       }
