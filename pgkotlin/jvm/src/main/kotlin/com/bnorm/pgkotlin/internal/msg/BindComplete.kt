@@ -19,7 +19,5 @@ internal object BindComplete : Message, Message.Factory<BindComplete> {
     return BindComplete
   }
 
-  override fun toString(): String {
-    return "BindComplete"
-  }
+  override fun toString() = "BindComplete"
 }

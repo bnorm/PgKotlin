@@ -5,11 +5,12 @@ import com.bnorm.pgkotlin.QueryExecutor
 import com.bnorm.pgkotlin.Response
 import com.bnorm.pgkotlin.Transaction
 import com.bnorm.pgkotlin.internal.msg.*
-import kotlinx.coroutines.experimental.*
 import kotlinx.coroutines.experimental.channels.*
 import kotlinx.coroutines.experimental.nio.aConnect
 import kotlinx.coroutines.experimental.nio.aRead
 import kotlinx.coroutines.experimental.nio.aWrite
+import kotlinx.coroutines.experimental.runBlocking
+import kotlinx.coroutines.experimental.withTimeout
 import okio.Buffer
 import org.intellij.lang.annotations.Language
 import java.io.Closeable
@@ -19,9 +20,8 @@ import java.nio.ByteBuffer
 import java.nio.channels.AsynchronousSocketChannel
 import java.util.concurrent.TimeUnit
 
-internal class Connection(
-  private val requests: SendChannel<Request>,
-  private val responses: ReceiveChannel<Message>,
+internal class PgKotlin(
+  private val connection: Something,
   private val channels: MutableMap<String, BroadcastChannel<String>>
 ) : QueryExecutor, NotificationChannel, Closeable {
 
@@ -60,116 +60,21 @@ internal class Connection(
     vararg params: Any?,
     rows: Int = 5
   ): Response {
-    if (params.isEmpty()) {
-      requests.send(Query(sql))
-    } else {
-      requests.send(Parse(sql))
-      requests.send(Bind(params.map { it.pgEncode() }))
-      requests.send(Describe(StatementType.Portal))
-      requests.send(Execute(rows = rows))
-      requests.send(Sync)
+    val portal = if (params.isEmpty()) connection.simpleQuery(sql)
+    else connection.extendedQuery(sql, params.toList(), rows)
 
-      responses.require<ParseComplete>()
-      responses.require<BindComplete>()
-    }
-
-    val first = responses.receive()
-    when (first) {
-      is CommandComplete -> {
-        responses.require<ReadyForQuery>()
-        return Response.Empty
-      }
-      is EmptyQueryResponse -> {
-        responses.require<ReadyForQuery>()
-        return Response.Empty
-      }
-      is RowDescription -> {
-        // Buffer 1 less than the number of possible rows to keep additional
-        // executions from being sent
-        return Response.Stream(object : Portal(first, produce<DataRow>(
-          capacity = (rows - 1).coerceAtLeast(0),
-          context = Unconfined
-        ) {
-          for (msg in responses) {
-            when (msg) {
-              is DataRow -> {
-                send(msg)
-              }
-              is PortalSuspended -> {
-                responses.require<ReadyForQuery>()
-                requests.send(Execute(rows = rows))
-                requests.send(Sync)
-              }
-              is CommandComplete -> {
-                responses.require<ReadyForQuery>()
-                requests.send(Close(StatementType.Portal))
-                requests.send(Sync)
-                responses.require<CloseComplete>()
-                responses.require<ReadyForQuery>()
-                return@produce
-              }
-              else -> throw PgProtocolException("msg=$msg")
-            }
-          }
-        }) {
-          override suspend fun close() {
-            // Cancel production and close the portal
-            // Consume messages until the confirmation of portal closure
-            if (!isClosedForReceive) {
-              cancel()
-              withContext(NonCancellable) {
-                requests.send(Close(StatementType.Portal))
-                requests.send(Sync)
-                responses.consumeUntil<CloseComplete>()
-                responses.require<ReadyForQuery>()
-              }
-            }
-          }
-        })
-      }
-      else -> throw PgProtocolException("msg=$first")
-    }
+    return if (portal == null) Response.Empty
+    else Response.Stream(portal)
   }
 
   override suspend fun query(
     @Language("PostgreSQL") sql: String,
     vararg params: Any?
-  ): Response {
-    if (params.isEmpty()) {
-      requests.send(Query(sql))
-    } else {
-      requests.send(Parse(sql))
-      requests.send(Bind(params.map { it.pgEncode() }))
-      requests.send(Describe(StatementType.Portal))
-      requests.send(Execute())
-      requests.send(Sync)
-
-      responses.require<ParseComplete>()
-      responses.require<BindComplete>()
-    }
-
-    var columns: RowDescription? = null
-    val rows = mutableListOf<DataRow>()
-    for (msg in responses) {
-      if (msg is CommandComplete) break
-      when (msg) {
-        is RowDescription -> columns = msg
-        is DataRow -> rows.add(msg)
-        else -> throw PgProtocolException("msg=$msg")
-      }
-    }
-
-    responses.require<ReadyForQuery>()
-
-    return when (columns) {
-      null -> Response.Empty
-      else -> Response.Complete(columns, rows)
-    }
-  }
+  ) = stream(sql, params, 0)
 
   override fun close() {
     runBlocking {
-      requests.send(Terminate)
+      connection.terminate()
     }
   }
 
@@ -205,7 +110,7 @@ internal class Connection(
       username: String = "postgres",
       password: String? = null,
       database: String = "postgres"
-    ): Connection {
+    ): PgKotlin {
       val socket = AsynchronousSocketChannel.open()
       socket.aConnect(address)
 
@@ -230,7 +135,7 @@ internal class Connection(
 
       responses.consumeUntil<ReadyForQuery>()
 
-      return Connection(requests, responses, channels)
+      return PgKotlin(Something(requests, responses), channels)
     }
 
     private fun sink(socket: AsynchronousSocketChannel) = actor<Request> {
@@ -276,7 +181,7 @@ internal class Connection(
   }
 }
 
-private suspend inline fun <reified T> ReceiveChannel<Message>.require(): T {
+private suspend inline fun <reified T> ReceiveChannel<Message>.receive(): T {
   val msg = withTimeout(30, TimeUnit.SECONDS) { receive() }
   return msg as? T ?: throw PgProtocolException("unexpected=$msg")
 }

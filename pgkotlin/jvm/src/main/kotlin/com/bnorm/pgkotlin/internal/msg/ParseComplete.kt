@@ -19,7 +19,5 @@ internal object ParseComplete : Message, Message.Factory<ParseComplete> {
     return ParseComplete
   }
 
-  override fun toString(): String {
-    return "ParseComplete"
-  }
+  override fun toString() = "ParseComplete"
 }

@@ -26,7 +26,7 @@ interface Transaction : QueryExecutor {
 suspend inline fun <R> QueryExecutor.transaction(block: QueryExecutor.() -> R): R {
   val txn = begin()
   try {
-    val result = block()
+    val result = txn.block()
     txn.commit()
     return result
   } catch (t: Throwable) {
