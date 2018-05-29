@@ -1,9 +1,9 @@
 package com.bnorm.pgkotlin.internal.protocol
 
-abstract class Statement(val name: String) {
+import com.bnorm.pgkotlin.Statement
+
+internal abstract class NamedStatement(val name: String) : Statement {
   init {
     require(name.isNotEmpty()) { "Cannot use unnamed prepared statement" }
   }
-
-  abstract suspend fun close()
 }

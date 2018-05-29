@@ -11,13 +11,13 @@ internal interface Protocol {
 
   suspend fun extendedQuery(sql: String, params: List<Any?>, rows: Int): Portal
 
-  suspend fun createStatement(sql: String, name: String): Statement
+  suspend fun createStatement(sql: String, name: String): NamedStatement
 
   suspend fun createPortal(sql: String, params: List<Any?>, name: String): String
 
-  suspend fun createPortal(statement: Statement, params: List<Any?>, name: String): String
+  suspend fun createPortal(statement: NamedStatement, params: List<Any?>, name: String): String
 
-  suspend fun execute(statement: Statement, params: List<Any?>, rows: Int): Portal
+  suspend fun execute(statement: NamedStatement, params: List<Any?>, rows: Int): Portal
 
   suspend fun executePortal(name: String, rows: Int): Portal
 }

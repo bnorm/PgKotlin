@@ -1,29 +1,40 @@
 package com.bnorm.pgkotlin.internal
 
-import com.bnorm.pgkotlin.NotificationChannel
-import com.bnorm.pgkotlin.QueryExecutor
-import com.bnorm.pgkotlin.Response
-import com.bnorm.pgkotlin.Transaction
+import com.bnorm.pgkotlin.*
 import com.bnorm.pgkotlin.internal.msg.*
+import com.bnorm.pgkotlin.internal.protocol.NamedStatement
 import com.bnorm.pgkotlin.internal.protocol.Postgres10
 import com.bnorm.pgkotlin.internal.protocol.Protocol
-import kotlinx.coroutines.experimental.channels.*
+import kotlinx.coroutines.experimental.channels.BroadcastChannel
+import kotlinx.coroutines.experimental.channels.Channel
+import kotlinx.coroutines.experimental.channels.actor
+import kotlinx.coroutines.experimental.channels.produce
 import kotlinx.coroutines.experimental.nio.aConnect
 import kotlinx.coroutines.experimental.nio.aRead
 import kotlinx.coroutines.experimental.nio.aWrite
 import kotlinx.coroutines.experimental.runBlocking
 import okio.Buffer
 import org.intellij.lang.annotations.Language
-import java.io.Closeable
 import java.io.IOException
 import java.net.InetSocketAddress
 import java.nio.ByteBuffer
 import java.nio.channels.AsynchronousSocketChannel
+import java.util.concurrent.atomic.AtomicInteger
 
 internal class Connection(
   private val protocol: Protocol,
   private val channels: MutableMap<String, BroadcastChannel<String>>
-) : QueryExecutor, NotificationChannel, Closeable {
+) : PgClient, QueryExecutor, AutoCloseable {
+
+  private val statementCount = AtomicInteger(0)
+  private val cursorCount = AtomicInteger(0)
+
+  var rows: Int = 0
+
+  override suspend fun prepare(sql: String, name: String?): Statement {
+    val actualName = name ?: "statement_"+statementCount.getAndIncrement()
+    return protocol.createStatement(sql, actualName)
+  }
 
   override suspend fun listen(channel: String): BroadcastChannel<String> {
     val broadcast = channels.computeIfAbsent(channel) {
@@ -55,10 +66,9 @@ internal class Connection(
     return PgTransaction(this)
   }
 
-  suspend fun stream(
+  override suspend fun query(
     @Language("PostgreSQL") sql: String,
-    vararg params: Any?,
-    rows: Int = 5
+    vararg params: Any?
   ): Response {
     val portal = if (params.isEmpty()) protocol.simpleQuery(sql)
     else protocol.extendedQuery(sql, params.toList(), rows)
@@ -67,10 +77,21 @@ internal class Connection(
     else Response.Stream(portal)
   }
 
-  override suspend fun query(
-    @Language("PostgreSQL") sql: String,
+  override suspend fun execute(
+    statement: Statement,
     vararg params: Any?
-  ) = stream(sql, params = *params, rows = 0)
+  ): Response {
+    val namedStatement = statement as? NamedStatement ?: throw IllegalArgumentException()
+    val portal = protocol.execute(namedStatement, params.toList(), 5)
+
+    return Response.Stream(portal)
+  }
+
+  override suspend fun execute(
+    portal: Portal
+  ): Response {
+    TODO("not implemented")
+  }
 
   override fun close() {
     runBlocking {

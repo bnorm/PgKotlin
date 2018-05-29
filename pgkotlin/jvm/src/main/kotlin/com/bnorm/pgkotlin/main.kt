@@ -56,16 +56,19 @@ fun main(args: Array<String>) = runBlocking<Unit> {
 //  delay(5, TimeUnit.MINUTES)
 
 
-  val connections = List(16) {
-    Connection.connect(
+  val connections: List<PgClient> = List(1) {
+    val connection = Connection.connect(
       hostname = "dev-brian-norman.dc.atavium.com",
       username = "postgres",
       database = "postgres"
     )
+    connection.rows = 5
+
+    connection
   }
 
   try {
-    for (iteration in 1..10) {
+    for (iteration in 1..1) {
       println("Performance iteration $iteration")
       performance(connections)
     }
@@ -75,16 +78,15 @@ fun main(args: Array<String>) = runBlocking<Unit> {
   }
 }
 
-private suspend fun performance(connections: List<Connection>) {
+private suspend fun performance(connections: List<PgClient>) {
   val (sum, totalTime) = connections.map { connection ->
     async {
       connection.transaction {
         var sum = 0L
         val time = measureTimeMillis {
-          val response = connection.stream(
+          val response = query(
             "SELECT i FROM generate_series(1, $1) AS i",
-            100_000L,
-            rows = 5_000
+            10L
           ) as Response.Stream
 
           sum = response.sumBy { 1 }.toLong()
