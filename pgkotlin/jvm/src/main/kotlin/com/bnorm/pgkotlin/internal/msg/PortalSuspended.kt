@@ -19,7 +19,5 @@ internal object PortalSuspended : Message, Message.Factory<PortalSuspended> {
     return PortalSuspended
   }
 
-  override fun toString(): String {
-    return "PortalSuspended"
-  }
+  override fun toString() = "PortalSuspended"
 }

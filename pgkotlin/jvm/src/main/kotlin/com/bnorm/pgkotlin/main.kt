@@ -1,6 +1,6 @@
 package com.bnorm.pgkotlin
 
-import com.bnorm.pgkotlin.internal.PgKotlin
+import com.bnorm.pgkotlin.internal.Connection
 import kotlinx.coroutines.experimental.async
 import kotlinx.coroutines.experimental.channels.sumBy
 import kotlinx.coroutines.experimental.runBlocking
@@ -8,7 +8,7 @@ import kotlin.math.roundToInt
 import kotlin.system.measureTimeMillis
 
 fun main(args: Array<String>) = runBlocking<Unit> {
-  //  val connection = PgKotlin.connect(
+  //  val connection = Connection.connect(
 //    hostname = "dev-brian-norman.dc.atavium.com",
 //    username = "postgres",
 //    database = "postgres"
@@ -57,7 +57,7 @@ fun main(args: Array<String>) = runBlocking<Unit> {
 
 
   val connections = List(16) {
-    PgKotlin.connect(
+    Connection.connect(
       hostname = "dev-brian-norman.dc.atavium.com",
       username = "postgres",
       database = "postgres"
@@ -75,7 +75,7 @@ fun main(args: Array<String>) = runBlocking<Unit> {
   }
 }
 
-private suspend fun performance(connections: List<PgKotlin>) {
+private suspend fun performance(connections: List<Connection>) {
   val (sum, totalTime) = connections.map { connection ->
     async {
       connection.transaction {

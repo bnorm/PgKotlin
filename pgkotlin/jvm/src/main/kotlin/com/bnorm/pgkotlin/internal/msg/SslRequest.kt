@@ -20,7 +20,5 @@ internal object SslRequest : Request {
     sink.writeInt(80877103)
   }
 
-  override fun toString(): String {
-    return "SslRequest"
-  }
+  override fun toString() = "SslRequest"
 }

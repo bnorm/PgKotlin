@@ -5,12 +5,13 @@ import com.bnorm.pgkotlin.QueryExecutor
 import com.bnorm.pgkotlin.Response
 import com.bnorm.pgkotlin.Transaction
 import com.bnorm.pgkotlin.internal.msg.*
+import com.bnorm.pgkotlin.internal.protocol.Postgres10
+import com.bnorm.pgkotlin.internal.protocol.Protocol
 import kotlinx.coroutines.experimental.channels.*
 import kotlinx.coroutines.experimental.nio.aConnect
 import kotlinx.coroutines.experimental.nio.aRead
 import kotlinx.coroutines.experimental.nio.aWrite
 import kotlinx.coroutines.experimental.runBlocking
-import kotlinx.coroutines.experimental.withTimeout
 import okio.Buffer
 import org.intellij.lang.annotations.Language
 import java.io.Closeable
@@ -18,10 +19,9 @@ import java.io.IOException
 import java.net.InetSocketAddress
 import java.nio.ByteBuffer
 import java.nio.channels.AsynchronousSocketChannel
-import java.util.concurrent.TimeUnit
 
-internal class PgKotlin(
-  private val connection: Something,
+internal class Connection(
+  private val protocol: Protocol,
   private val channels: MutableMap<String, BroadcastChannel<String>>
 ) : QueryExecutor, NotificationChannel, Closeable {
 
@@ -60,8 +60,8 @@ internal class PgKotlin(
     vararg params: Any?,
     rows: Int = 5
   ): Response {
-    val portal = if (params.isEmpty()) connection.simpleQuery(sql)
-    else connection.extendedQuery(sql, params.toList(), rows)
+    val portal = if (params.isEmpty()) protocol.simpleQuery(sql)
+    else protocol.extendedQuery(sql, params.toList(), rows)
 
     return if (portal == null) Response.Empty
     else Response.Stream(portal)
@@ -70,11 +70,11 @@ internal class PgKotlin(
   override suspend fun query(
     @Language("PostgreSQL") sql: String,
     vararg params: Any?
-  ) = stream(sql, params, 0)
+  ) = stream(sql, params = *params, rows = 0)
 
   override fun close() {
     runBlocking {
-      connection.terminate()
+      protocol.terminate()
     }
   }
 
@@ -110,7 +110,7 @@ internal class PgKotlin(
       username: String = "postgres",
       password: String? = null,
       database: String = "postgres"
-    ): PgKotlin {
+    ): Connection {
       val socket = AsynchronousSocketChannel.open()
       socket.aConnect(address)
 
@@ -118,24 +118,11 @@ internal class PgKotlin(
       val channels = mutableMapOf<String, BroadcastChannel<String>>()
       val responses = source(socket, channels)
 
-      // TODO(bnorm) SSL handshake?
-      requests.send(StartupMessage(username = username, database = database))
+      val protocol = Postgres10(requests, responses)
 
-      val authentication = responses.receive() as? Authentication ?: throw PgProtocolException()
-      if (!authentication.success) {
-        if (password != null) {
-          requests.send(PasswordMessage.create(username, password, authentication.md5salt))
-        } else {
-          throw IllegalArgumentException("no authentication")
-        }
-      }
+      protocol.startup(username, password, database)
 
-      // responses consume BackendKeyData
-      // responses consume ParameterStatus
-
-      responses.consumeUntil<ReadyForQuery>()
-
-      return PgKotlin(Something(requests, responses), channels)
+      return Connection(protocol, channels)
     }
 
     private fun sink(socket: AsynchronousSocketChannel) = actor<Request> {
@@ -179,20 +166,6 @@ internal class PgKotlin(
       }
     }
   }
-}
-
-private suspend inline fun <reified T> ReceiveChannel<Message>.receive(): T {
-  val msg = withTimeout(30, TimeUnit.SECONDS) { receive() }
-  return msg as? T ?: throw PgProtocolException("unexpected=$msg")
-}
-
-private suspend inline fun <reified T : Message> ReceiveChannel<Message>.consumeUntil(): T {
-  for (msg in this) {
-    if (msg is T) {
-      return msg
-    }
-  }
-  throw PgProtocolException("not found = ${T::class}")
 }
 
 private suspend fun AsynchronousSocketChannel.aRead(

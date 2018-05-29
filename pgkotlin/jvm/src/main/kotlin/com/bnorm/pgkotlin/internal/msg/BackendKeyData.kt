@@ -18,17 +18,17 @@ import okio.BufferedSource
  * </pre>
  */
 internal data class BackendKeyData(
-  val process: Int,
-  val secret: Int
+  val processId: Int,
+  val secretKey: Int
 ) : Message {
   override val id: Int = Companion.id
 
   companion object : Message.Factory<BackendKeyData> {
     override val id: Int = 'K'.toInt()
     override fun decode(source: BufferedSource): BackendKeyData {
-      val process = source.readInt()
-      val secret = source.readInt()
-      return BackendKeyData(process, secret)
+      val processId = source.readInt()
+      val secretKey = source.readInt()
+      return BackendKeyData(processId, secretKey)
     }
   }
 }

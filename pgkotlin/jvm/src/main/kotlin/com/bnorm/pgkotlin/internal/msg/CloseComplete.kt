@@ -19,7 +19,5 @@ internal object CloseComplete : Message, Message.Factory<CloseComplete> {
     return CloseComplete
   }
 
-  override fun toString(): String {
-    return "CloseComplete"
-  }
+  override fun toString() = "CloseComplete"
 }

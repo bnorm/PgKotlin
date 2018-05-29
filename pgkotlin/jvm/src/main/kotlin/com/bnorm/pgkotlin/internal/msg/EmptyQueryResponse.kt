@@ -19,7 +19,5 @@ internal object EmptyQueryResponse : Message, Message.Factory<EmptyQueryResponse
     return EmptyQueryResponse
   }
 
-  override fun toString(): String {
-    return "EmptyQueryResponse"
-  }
+  override fun toString() = "EmptyQueryResponse"
 }

@@ -18,7 +18,5 @@ internal object Terminate : Request {
   override fun encode(sink: BufferedSink) {
   }
 
-  override fun toString(): String {
-    return "Terminate"
-  }
+  override fun toString() = "Terminate"
 }
