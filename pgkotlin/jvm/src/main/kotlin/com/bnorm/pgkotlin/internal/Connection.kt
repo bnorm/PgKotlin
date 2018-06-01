@@ -5,6 +5,8 @@ import com.bnorm.pgkotlin.internal.msg.*
 import com.bnorm.pgkotlin.internal.protocol.NamedStatement
 import com.bnorm.pgkotlin.internal.protocol.Postgres10
 import com.bnorm.pgkotlin.internal.protocol.Protocol
+import kotlinx.coroutines.experimental.Deferred
+import kotlinx.coroutines.experimental.Job
 import kotlinx.coroutines.experimental.channels.BroadcastChannel
 import kotlinx.coroutines.experimental.channels.Channel
 import kotlinx.coroutines.experimental.channels.actor
@@ -29,7 +31,7 @@ internal class Connection(
   private val statementCount = AtomicInteger(0)
   private val cursorCount = AtomicInteger(0)
 
-  var rows: Int = 0
+  var rows: Int = 5
 
   override suspend fun prepare(sql: String, name: String?): Statement {
     val actualName = name ?: "statement_"+statementCount.getAndIncrement()
@@ -63,7 +65,7 @@ internal class Connection(
 
   override suspend fun begin(): Transaction {
     query("BEGIN TRANSACTION")
-    return PgTransaction(this)
+    return PgTransaction(this, protocol)
   }
 
   override suspend fun query(
@@ -80,7 +82,7 @@ internal class Connection(
   override suspend fun execute(
     statement: Statement,
     vararg params: Any?
-  ): Response {
+  ): Response.Stream {
     val namedStatement = statement as? NamedStatement ?: throw IllegalArgumentException()
     val portal = protocol.execute(namedStatement, params.toList(), 5)
 
@@ -89,7 +91,7 @@ internal class Connection(
 
   override suspend fun execute(
     portal: Portal
-  ): Response {
+  ): Response.Stream {
     TODO("not implemented")
   }
 

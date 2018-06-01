@@ -1,7 +1,6 @@
 package com.bnorm.pgkotlin.internal.protocol
 
 import com.bnorm.pgkotlin.internal.PgProtocolException
-import com.bnorm.pgkotlin.internal.debug
 import com.bnorm.pgkotlin.internal.msg.*
 import com.bnorm.pgkotlin.internal.pgEncode
 import kotlinx.coroutines.experimental.NonCancellable
@@ -17,7 +16,11 @@ internal class Postgres10(
   private val requests: SendChannel<Request>,
   private val responses: ReceiveChannel<Message>
 ) : Protocol {
-  override suspend fun startup(username: String, password: String?, database: String): Handshake {
+  override suspend fun startup(
+    username: String,
+    password: String?,
+    database: String
+  ): Handshake {
     // https://www.postgresql.org/docs/current/static/protocol-flow.html#id-1.10.5.7.3
 
     // TODO(bnorm) SSL handshake?
@@ -50,20 +53,25 @@ internal class Postgres10(
     return Handshake(processId, secretKey, parameters)
   }
 
-  override suspend fun terminate() = trace("terminate()") {
+  override suspend fun terminate(
+  ) {
     // https://www.postgresql.org/docs/current/static/protocol-flow.html#id-1.10.5.7.10
 
     requests.send(Terminate)
   }
 
-  override suspend fun cancel(handshake: Handshake) = trace("cancel()") {
+  override suspend fun cancel(
+    handshake: Handshake
+  ) {
     // https://www.postgresql.org/docs/current/static/protocol-flow.html#id-1.10.5.7.10
 
     // Must be performed on a different connection than the original query
     requests.send(CancelRequest(handshake.processId, handshake.secretKey))
   }
 
-  override suspend fun simpleQuery(sql: String): Portal? = trace("simpleQuery()") {
+  override suspend fun simpleQuery(
+    sql: String
+  ): RowStream? {
     // https://www.postgresql.org/docs/current/static/protocol-flow.html#id-1.10.5.7.4
 
     requests.send(Query(sql))
@@ -83,55 +91,66 @@ internal class Postgres10(
     }
   }
 
-  override suspend fun extendedQuery(sql: String, params: List<Any?>, rows: Int): Portal =
-    trace("extendedQuery()") {
-      // https://www.postgresql.org/docs/current/static/protocol-flow.html#PROTOCOL-FLOW-EXT-QUERY
+  override suspend fun extendedQuery(
+    sql: String,
+    params: List<Any?>,
+    rows: Int
+  ): RowStream {
+    // https://www.postgresql.org/docs/current/static/protocol-flow.html#PROTOCOL-FLOW-EXT-QUERY
 
-      requests.send(Parse(sql))
-      // Flush for early ParseComplete?
+    requests.send(Parse(sql))
+    // Flush for early ParseComplete?
 
-      requests.send(Bind(params.map { it.pgEncode() }))
-      // Flush for early BindComplete?
+    requests.send(Bind(params.map { it.pgEncode() }))
+    // Flush for early BindComplete?
 
-      requests.send(Describe(StatementType.Portal))
-      // Flush for early RowDescription?
+    requests.send(Describe(StatementType.Portal))
+    // Flush for early RowDescription?
 
-      requests.send(Execute(rows = rows))
-      requests.send(Sync)
+    requests.send(Execute(rows = rows))
+    requests.send(Sync)
 
-      responses.receive<ParseComplete>()
-      responses.receive<BindComplete>()
-      val description = responses.receive<RowDescription>()
+    responses.receive<ParseComplete>()
+    responses.receive<BindComplete>()
+    val description = responses.receive<RowDescription>()
 
-      return createPortal(description, rows)
-    }
+    return createPortal(description, rows)
+  }
 
-  override suspend fun createStatement(sql: String, name: String): NamedStatement =
-    trace("createStatement()") {
-      // https://www.postgresql.org/docs/current/static/protocol-flow.html#PROTOCOL-FLOW-EXT-QUERY
-      require(name.isNotEmpty()) { "Cannot use unnamed prepared statement" }
+  override suspend fun createStatement(
+    sql: String,
+    name: String
+  ): NamedStatement {
+    // https://www.postgresql.org/docs/current/static/protocol-flow.html#PROTOCOL-FLOW-EXT-QUERY
+    require(name.isNotEmpty()) { "Cannot use unnamed prepared statement" }
 
-      requests.send(Parse(sql, preparedStatement = name))
-      requests.send(Sync)
+    requests.send(Parse(sql, preparedStatement = name))
+    requests.send(Sync)
 
-      responses.receive<ParseComplete>()
-      responses.receive<ReadyForQuery>()
+    responses.receive<ParseComplete>()
+    responses.receive<ReadyForQuery>()
 
-      return object : NamedStatement(name) {
-        override suspend fun close() {
-          requests.send(Close(StatementType.Prepared, name))
-          requests.send(Sync)
-          responses.receive<CloseComplete>()
-          responses.receive<ReadyForQuery>()
-        }
+    return newStatement(name)
+  }
+
+  private fun newStatement(
+    name: String
+  ): NamedStatement {
+    return object : NamedStatement(name) {
+      override suspend fun close() {
+        requests.send(Close(StatementType.Prepared, name))
+        requests.send(Sync)
+        responses.receive<CloseComplete>()
+        responses.receive<ReadyForQuery>()
       }
     }
+  }
 
   override suspend fun createPortal(
     sql: String,
     params: List<Any?>,
     name: String
-  ): String = trace("createPortal($sql, $params, $name)") {
+  ): NamedPortal {
     // https://www.postgresql.org/docs/current/static/protocol-flow.html#PROTOCOL-FLOW-EXT-QUERY
     require(name.isNotEmpty()) { "Cannot use unnamed portal" }
 
@@ -145,14 +164,14 @@ internal class Postgres10(
     responses.receive<BindComplete>()
     responses.receive<ReadyForQuery>()
 
-    return name
+    return newPortal(name)
   }
 
   override suspend fun createPortal(
     statement: NamedStatement,
     params: List<Any?>,
     name: String
-  ): String = trace("createPortal($statement, $params, $name)") {
+  ): NamedPortal {
     // https://www.postgresql.org/docs/current/static/protocol-flow.html#PROTOCOL-FLOW-EXT-QUERY
     require(name.isNotEmpty()) { "Cannot use unnamed portal" }
 
@@ -168,14 +187,25 @@ internal class Postgres10(
     responses.receive<BindComplete>()
     responses.receive<ReadyForQuery>()
 
-    return name
+    return newPortal(name)
+  }
+
+  private fun newPortal(
+    name: String
+  ) = object : NamedPortal(name) {
+    override suspend fun close() {
+      requests.send(Close(StatementType.Portal, name))
+      requests.send(Sync)
+      responses.receive<CloseComplete>()
+      responses.receive<ReadyForQuery>()
+    }
   }
 
   override suspend fun execute(
     statement: NamedStatement,
     params: List<Any?>,
     rows: Int
-  ): Portal = trace("execute()") {
+  ): RowStream {
     // https://www.postgresql.org/docs/current/static/protocol-flow.html#PROTOCOL-FLOW-EXT-QUERY
 
     requests.send(Bind(params.map { it.pgEncode() }, preparedStatement = statement.name))
@@ -193,14 +223,17 @@ internal class Postgres10(
     return createPortal(description, rows)
   }
 
-  override suspend fun executePortal(name: String, rows: Int): Portal = trace("executePortal()") {
+  override suspend fun execute(
+    portal: NamedPortal,
+    rows: Int
+  ): RowStream {
     // https://www.postgresql.org/docs/current/static/protocol-flow.html#PROTOCOL-FLOW-EXT-QUERY
-    require(name.isNotEmpty()) { "Cannot use unnamed portal" }
+    require(portal.name.isNotEmpty()) { "Cannot use unnamed portal" }
 
-    requests.send(Describe(StatementType.Portal, name = name))
+    requests.send(Describe(StatementType.Portal, name = portal.name))
     // Flush for early RowDescription?
 
-    requests.send(Execute(name = name, rows = rows))
+    requests.send(Execute(name = portal.name, rows = rows))
     requests.send(Sync)
 
     val description = responses.receive<RowDescription>()
@@ -212,7 +245,7 @@ internal class Postgres10(
   private fun createPortal(
     description: RowDescription,
     rows: Int
-  ): Portal = trace("createPortal($description, $rows)") {
+  ): RowStream {
     // Buffer 1 less than the number of possible rows to keep additional
     // executions from being sent
     val data = produce<DataRow>(
@@ -242,7 +275,7 @@ internal class Postgres10(
       }
     }
 
-    return object : Portal(description, data) {
+    return object : RowStream(description, data) {
       override suspend fun close() {
         // Cancel production and close the portal
         // Consume messages until the confirmation of portal closure
@@ -259,55 +292,19 @@ internal class Postgres10(
     }
   }
 
-//  private inline fun protocalSafe(block: () -> Unit) {
-//    if (response !is ReadyForQuery) {
-//      responses.receiveUntil<ReadyForQuery>()
-//    }
-//  }
-
   private suspend inline fun <reified T> ReceiveChannel<Message>.receive(
     timeout: Long = 30,
     timeUnit: TimeUnit = TimeUnit.SECONDS
   ): T {
     val msg = withTimeout(timeout, timeUnit) { receive() }
-    return msg as? T ?: throw PgProtocolException("unexpected=$msg")
+    return msg as? T ?: throw Exception("unexpected=$msg")
   }
 
-  private suspend inline fun <reified T : Message> ReceiveChannel<Message>.receiveUntil(): T {
+  private suspend inline fun <reified T : Message> ReceiveChannel<Message>.receiveUntil(
+  ): T {
     for (msg in this) {
       if (msg is T) return msg
     }
     throw PgProtocolException("not found = ${T::class}")
-  }
-
-  private inline fun <T> trace(name: String, block: () -> T): T {
-    try {
-      debug { println("enter: $name") }
-      val result = block()
-      debug {
-        if (result == Unit) {
-          println("exit: $name")
-        } else {
-          println("exit: $name -> result=$result")
-        }
-      }
-      return result
-    } catch (t: Throwable) {
-      debug {
-        println("exit: $name -> error")
-        t.printStackTrace(System.out)
-      }
-      throw t
-    }
-  }
-
-  private suspend inline fun <T> protect(block: () -> T): T {
-    try {
-      return block()
-    } catch (t: Throwable) {
-      requests.send(Sync)
-      responses.receiveUntil<ReadyForQuery>()
-      throw t
-    }
   }
 }

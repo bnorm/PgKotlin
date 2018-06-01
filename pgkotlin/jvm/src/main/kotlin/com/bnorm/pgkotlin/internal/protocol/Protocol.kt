@@ -7,17 +7,17 @@ internal interface Protocol {
 
   suspend fun cancel(handshake: Handshake)
 
-  suspend fun simpleQuery(sql: String): Portal?
+  suspend fun simpleQuery(sql: String): RowStream?
 
-  suspend fun extendedQuery(sql: String, params: List<Any?>, rows: Int): Portal
+  suspend fun extendedQuery(sql: String, params: List<Any?>, rows: Int): RowStream
 
   suspend fun createStatement(sql: String, name: String): NamedStatement
 
-  suspend fun createPortal(sql: String, params: List<Any?>, name: String): String
+  suspend fun createPortal(sql: String, params: List<Any?>, name: String): NamedPortal
 
-  suspend fun createPortal(statement: NamedStatement, params: List<Any?>, name: String): String
+  suspend fun createPortal(statement: NamedStatement, params: List<Any?>, name: String): NamedPortal
 
-  suspend fun execute(statement: NamedStatement, params: List<Any?>, rows: Int): Portal
+  suspend fun execute(statement: NamedStatement, params: List<Any?>, rows: Int): RowStream
 
-  suspend fun executePortal(name: String, rows: Int): Portal
+  suspend fun execute(portal: NamedPortal, rows: Int): RowStream
 }

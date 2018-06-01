@@ -1,37 +1,11 @@
 package com.bnorm.pgkotlin.internal
 
 import com.bnorm.pgkotlin.*
+import com.bnorm.pgkotlin.internal.protocol.Protocol
 
 internal abstract class BaseTransaction(
   private val executor: QueryExecutor
-) : Transaction {
-
-  final override suspend fun query(sql: String, vararg params: Any?): Response {
-    try {
-      return executor.query(sql, *params)
-    } catch (t: Throwable) {
-      rollback()
-      throw t
-    }
-  }
-
-  final override suspend fun execute(statement: Statement, vararg params: Any?): Response {
-    try {
-      return executor.execute(statement, params)
-    } catch (t: Throwable) {
-      rollback()
-      throw t
-    }
-  }
-
-  final override suspend fun execute(portal: Portal): Response {
-    try {
-      return executor.execute(portal)
-    } catch (t: Throwable) {
-      rollback()
-      throw t
-    }
-  }
+) : Transaction, QueryExecutor by executor {
 
   final override suspend fun create(
     statement: Statement,
@@ -47,12 +21,13 @@ internal abstract class BaseTransaction(
 }
 
 internal class PgTransaction(
-  private val executor: QueryExecutor
-) : BaseTransaction(executor) {
+  private val executor: QueryExecutor,
+  private val protocol: Protocol
+  ) : BaseTransaction(executor) {
 
   override suspend fun begin(): Transaction {
     executor.query("SAVEPOINT savepoint_0")
-    return PgNestedTransaction(executor, 0)
+    return PgNestedTransaction(executor, protocol, 0)
   }
 
   override suspend fun commit() {
@@ -66,11 +41,12 @@ internal class PgTransaction(
 
 internal class PgNestedTransaction(
   private val executor: QueryExecutor,
+  private val protocol: Protocol,
   private val depth: Int
 ) : BaseTransaction(executor) {
   override suspend fun begin(): Transaction {
     executor.query("SAVEPOINT savepoint_${depth + 1}")
-    return PgNestedTransaction(executor, depth + 1)
+    return PgNestedTransaction(executor, protocol, depth + 1)
   }
 
   override suspend fun commit() {

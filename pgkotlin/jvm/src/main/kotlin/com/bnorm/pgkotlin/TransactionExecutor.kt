@@ -35,7 +35,7 @@ suspend inline fun <R> TransactionExecutor.transaction(block: QueryExecutor.() -
     txn.commit()
     return result
   } catch (t: Throwable) {
-    debug { t.printStackTrace(System.out) }
+    // TODO? rollback?
     if (t !is PgProtocolException && t !is NotImplementedError) {
       txn.rollback()
     }

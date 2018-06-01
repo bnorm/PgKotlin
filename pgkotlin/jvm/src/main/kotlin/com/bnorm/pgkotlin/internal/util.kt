@@ -1,8 +1,8 @@
 package com.bnorm.pgkotlin.internal
 
-const val debug = true
+private const val debug = true
 
-inline fun debug(block: () -> Unit) {
+internal inline fun debug(block: () -> Unit) {
   if (debug) {
     block()
   }

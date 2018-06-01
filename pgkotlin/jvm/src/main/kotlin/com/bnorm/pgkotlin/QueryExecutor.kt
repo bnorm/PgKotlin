@@ -15,9 +15,9 @@ interface QueryExecutor : TransactionExecutor {
   suspend fun execute(
     statement: Statement,
     vararg params: Any? = emptyArray()
-  ): Response
+  ): Response.Stream
 
   suspend fun execute(
     portal: Portal
-  ): Response
+  ): Response.Stream
 }
