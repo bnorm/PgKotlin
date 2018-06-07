@@ -95,7 +95,7 @@ internal class Postgres10(
     sql: String,
     params: List<Any?>,
     rows: Int
-  ): RowStream {
+  ): RowStream? {
     // https://www.postgresql.org/docs/current/static/protocol-flow.html#PROTOCOL-FLOW-EXT-QUERY
 
     requests.send(Parse(sql))
@@ -112,9 +112,16 @@ internal class Postgres10(
 
     responses.receive<ParseComplete>()
     responses.receive<BindComplete>()
-    val description = responses.receive<RowDescription>()
-
-    return createPortal(description, rows)
+    val response = responses.receive()
+    return when (response) {
+      is NoData -> {
+        responses.receive<CommandComplete>()
+        responses.receive<ReadyForQuery>()
+        null
+      }
+      is RowDescription -> createPortal(response, rows)
+      else -> throw PgProtocolException("msg=$response")
+    }
   }
 
   override suspend fun createStatement(
@@ -205,7 +212,7 @@ internal class Postgres10(
     statement: NamedStatement,
     params: List<Any?>,
     rows: Int
-  ): RowStream {
+  ): RowStream? {
     // https://www.postgresql.org/docs/current/static/protocol-flow.html#PROTOCOL-FLOW-EXT-QUERY
 
     requests.send(Bind(params.map { it.pgEncode() }, preparedStatement = statement.name))
@@ -218,15 +225,22 @@ internal class Postgres10(
     requests.send(Sync)
 
     responses.receive<BindComplete>()
-    val description = responses.receive<RowDescription>()
-
-    return createPortal(description, rows)
+    val response = responses.receive()
+    return when (response) {
+      is NoData -> {
+        responses.receive<CommandComplete>()
+        responses.receive<ReadyForQuery>()
+        null
+      }
+      is RowDescription -> createPortal(response, rows)
+      else -> throw PgProtocolException("msg=$response")
+    }
   }
 
   override suspend fun execute(
     portal: NamedPortal,
     rows: Int
-  ): RowStream {
+  ): RowStream? {
     // https://www.postgresql.org/docs/current/static/protocol-flow.html#PROTOCOL-FLOW-EXT-QUERY
     require(portal.name.isNotEmpty()) { "Cannot use unnamed portal" }
 
@@ -236,9 +250,16 @@ internal class Postgres10(
     requests.send(Execute(name = portal.name, rows = rows))
     requests.send(Sync)
 
-    val description = responses.receive<RowDescription>()
-
-    return createPortal(description, rows)
+    val response = responses.receive()
+    return when (response) {
+      is NoData -> {
+        responses.receive<CommandComplete>()
+        responses.receive<ReadyForQuery>()
+        null
+      }
+      is RowDescription -> createPortal(response, rows)
+      else -> throw PgProtocolException("msg=$response")
+    }
   }
 
 

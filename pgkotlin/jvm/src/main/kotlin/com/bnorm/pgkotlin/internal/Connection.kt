@@ -5,8 +5,6 @@ import com.bnorm.pgkotlin.internal.msg.*
 import com.bnorm.pgkotlin.internal.protocol.NamedStatement
 import com.bnorm.pgkotlin.internal.protocol.Postgres10
 import com.bnorm.pgkotlin.internal.protocol.Protocol
-import kotlinx.coroutines.experimental.Deferred
-import kotlinx.coroutines.experimental.Job
 import kotlinx.coroutines.experimental.channels.BroadcastChannel
 import kotlinx.coroutines.experimental.channels.Channel
 import kotlinx.coroutines.experimental.channels.actor
@@ -29,9 +27,6 @@ internal class Connection(
 ) : PgClient, QueryExecutor, AutoCloseable {
 
   private val statementCount = AtomicInteger(0)
-  private val cursorCount = AtomicInteger(0)
-
-  var rows: Int = 5
 
   override suspend fun prepare(sql: String, name: String?): Statement {
     val actualName = name ?: "statement_"+statementCount.getAndIncrement()
@@ -71,27 +66,28 @@ internal class Connection(
   override suspend fun query(
     @Language("PostgreSQL") sql: String,
     vararg params: Any?
-  ): Response {
+  ): Response? {
     val portal = if (params.isEmpty()) protocol.simpleQuery(sql)
-    else protocol.extendedQuery(sql, params.toList(), rows)
+    else protocol.extendedQuery(sql, params.toList(), 5000)
 
-    return if (portal == null) Response.Empty
-    else Response.Stream(portal)
+    return if (portal == null) null
+    else Response(portal)
   }
 
   override suspend fun execute(
     statement: Statement,
     vararg params: Any?
-  ): Response.Stream {
+  ): Response? {
     val namedStatement = statement as? NamedStatement ?: throw IllegalArgumentException()
-    val portal = protocol.execute(namedStatement, params.toList(), 5)
+    val portal = protocol.execute(namedStatement, params.toList(), 5000)
 
-    return Response.Stream(portal)
+    return if (portal == null) null
+    else Response(portal)
   }
 
   override suspend fun execute(
     portal: Portal
-  ): Response.Stream {
+  ): Response {
     TODO("not implemented")
   }
 
@@ -111,6 +107,7 @@ internal class Connection(
       DataRow,
       EmptyQueryResponse,
       ErrorResponse,
+      NoData,
       NotificationResponse,
       ParameterDescription,
       ParameterStatus,
@@ -123,16 +120,16 @@ internal class Connection(
     suspend fun connect(
       hostname: String = "localhost",
       port: Int = 5432,
+      database: String = "postgres",
       username: String = "postgres",
-      password: String? = null,
-      database: String = "postgres"
-    ) = connect(InetSocketAddress(hostname, port), username, password, database)
+      password: String? = null
+    ) = connect(InetSocketAddress(hostname, port), database, username, password)
 
     suspend fun connect(
       address: InetSocketAddress = InetSocketAddress("localhost", 5432),
+      database: String = "postgres",
       username: String = "postgres",
-      password: String? = null,
-      database: String = "postgres"
+      password: String? = null
     ): Connection {
       val socket = AsynchronousSocketChannel.open()
       socket.aConnect(address)

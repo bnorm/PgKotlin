@@ -1,7 +1,5 @@
 package com.bnorm.pgkotlin
 
-import com.bnorm.pgkotlin.internal.PgProtocolException
-import com.bnorm.pgkotlin.internal.debug
 import org.intellij.lang.annotations.Language
 
 interface TransactionExecutor {
@@ -36,9 +34,6 @@ suspend inline fun <R> TransactionExecutor.transaction(block: QueryExecutor.() -
     return result
   } catch (t: Throwable) {
     // TODO? rollback?
-    if (t !is PgProtocolException && t !is NotImplementedError) {
-      txn.rollback()
-    }
     throw t
   }
 }

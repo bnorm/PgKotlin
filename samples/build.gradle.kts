@@ -6,5 +6,5 @@ dependencies {
   implementation(project(":pgkotlin:jvm"))
 
   implementation(kotlin("stdlib-common"))
-  implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:0.22.5")
+  implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:0.23.0-dev-1")
 }

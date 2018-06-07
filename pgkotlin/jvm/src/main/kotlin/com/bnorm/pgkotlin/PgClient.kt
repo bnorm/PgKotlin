@@ -14,14 +14,14 @@ interface PgClient : TransactionExecutor, NotificationChannel, AutoCloseable {
 suspend fun PgClient(
   hostname: String,
   port: Int = 5432,
+  database: String = "postgres",
   username: String = "postgres",
-  password: String? = null,
-  database: String = "postgres"
-): PgClient = Connection.connect(InetSocketAddress(hostname, port), username, password, database)
+  password: String? = null
+): PgClient = PgClient(InetSocketAddress(hostname, port), database, username, password)
 
 suspend fun PgClient(
   address: InetSocketAddress,
+  database: String = "postgres",
   username: String = "postgres",
-  password: String? = null,
-  database: String = "postgres"
-): PgClient = Connection.connect(address, username, password, database)
+  password: String? = null
+): PgClient = Connection.connect(address, database, username, password)

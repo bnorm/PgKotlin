@@ -10,14 +10,14 @@ interface QueryExecutor : TransactionExecutor {
   suspend fun query(
     @Language("PostgreSQL") sql: String,
     vararg params: Any? = emptyArray()
-  ): Response
+  ): Response?
 
   suspend fun execute(
     statement: Statement,
     vararg params: Any? = emptyArray()
-  ): Response.Stream
+  ): Response?
 
   suspend fun execute(
     portal: Portal
-  ): Response.Stream
+  ): Response?
 }

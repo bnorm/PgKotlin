@@ -1,6 +1,9 @@
 package com.bnorm.pgkotlin.internal
 
-import com.bnorm.pgkotlin.*
+import com.bnorm.pgkotlin.Portal
+import com.bnorm.pgkotlin.QueryExecutor
+import com.bnorm.pgkotlin.Statement
+import com.bnorm.pgkotlin.Transaction
 import com.bnorm.pgkotlin.internal.protocol.Protocol
 
 internal abstract class BaseTransaction(
@@ -26,16 +29,16 @@ internal class PgTransaction(
   ) : BaseTransaction(executor) {
 
   override suspend fun begin(): Transaction {
-    executor.query("SAVEPOINT savepoint_0")
+    protocol.simpleQuery("SAVEPOINT savepoint_0")
     return PgNestedTransaction(executor, protocol, 0)
   }
 
   override suspend fun commit() {
-    executor.query("COMMIT TRANSACTION")
+    protocol.simpleQuery("COMMIT TRANSACTION")
   }
 
   override suspend fun rollback() {
-    executor.query("ROLLBACK TRANSACTION")
+    protocol.simpleQuery("ROLLBACK TRANSACTION")
   }
 }
 
@@ -45,15 +48,15 @@ internal class PgNestedTransaction(
   private val depth: Int
 ) : BaseTransaction(executor) {
   override suspend fun begin(): Transaction {
-    executor.query("SAVEPOINT savepoint_${depth + 1}")
+    protocol.simpleQuery("SAVEPOINT savepoint_${depth + 1}")
     return PgNestedTransaction(executor, protocol, depth + 1)
   }
 
   override suspend fun commit() {
-    executor.query("RELEASE SAVEPOINT savepoint_$depth")
+    protocol.simpleQuery("RELEASE SAVEPOINT savepoint_$depth")
   }
 
   override suspend fun rollback() {
-    executor.query("ROLLBACK TO SAVEPOINT savepoint_$depth")
+    protocol.simpleQuery("ROLLBACK TO SAVEPOINT savepoint_$depth")
   }
 }

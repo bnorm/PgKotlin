@@ -4,7 +4,6 @@ import okio.Buffer
 import okio.BufferedSink
 import okio.BufferedSource
 import java.io.IOException
-import kotlin.coroutines.experimental.buildSequence
 
 internal interface Message {
   val id: Int

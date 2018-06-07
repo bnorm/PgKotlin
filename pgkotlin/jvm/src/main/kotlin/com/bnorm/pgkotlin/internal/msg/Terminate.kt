@@ -15,8 +15,7 @@ import okio.BufferedSink
  */
 internal object Terminate : Request {
   override val id: Int = 'X'.toInt()
-  override fun encode(sink: BufferedSink) {
-  }
+  override fun encode(sink: BufferedSink) {}
 
   override fun toString() = "Terminate"
 }

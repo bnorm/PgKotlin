@@ -9,7 +9,7 @@ internal interface Protocol {
 
   suspend fun simpleQuery(sql: String): RowStream?
 
-  suspend fun extendedQuery(sql: String, params: List<Any?>, rows: Int): RowStream
+  suspend fun extendedQuery(sql: String, params: List<Any?>, rows: Int): RowStream?
 
   suspend fun createStatement(sql: String, name: String): NamedStatement
 
@@ -17,7 +17,7 @@ internal interface Protocol {
 
   suspend fun createPortal(statement: NamedStatement, params: List<Any?>, name: String): NamedPortal
 
-  suspend fun execute(statement: NamedStatement, params: List<Any?>, rows: Int): RowStream
+  suspend fun execute(statement: NamedStatement, params: List<Any?>, rows: Int): RowStream?
 
-  suspend fun execute(portal: NamedPortal, rows: Int): RowStream
+  suspend fun execute(portal: NamedPortal, rows: Int): RowStream?
 }

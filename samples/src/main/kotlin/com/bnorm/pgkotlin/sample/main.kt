@@ -2,31 +2,37 @@ package com.bnorm.pgkotlin.sample
 
 import com.bnorm.pgkotlin.PgClient
 import com.bnorm.pgkotlin.transaction
-import kotlinx.coroutines.experimental.CoroutineStart
 import kotlinx.coroutines.experimental.async
-import kotlinx.coroutines.experimental.channels.map
 import kotlinx.coroutines.experimental.channels.sumBy
 import kotlinx.coroutines.experimental.runBlocking
+import java.time.Duration
+import java.time.Instant
 import kotlin.math.roundToInt
 import kotlin.system.measureTimeMillis
 
+val clients = 16
+val iterations = 10
+val rows = 100_000L
+val duration = Duration.ofSeconds(5)
+
 fun main(args: Array<String>) = runBlocking<Unit> {
-
-
-  val clients: List<PgClient> = List(2) {
-    val client = PgClient(
+  val clients = List(clients) {
+    PgClient(
       hostname = "dev-brian-norman.dc.atavium.com",
-      username = "postgres",
-      database = "postgres"
+      database = "postgres",
+      username = "postgres"
     )
-
-    client
   }
 
   try {
-    for (iteration in 1..1) {
-      println("Performance iteration $iteration")
-      performance(clients)
+    for (iteration in 1..iterations) {
+      println("Query performance iteration $iteration")
+      queryPerformance(clients)
+    }
+
+    for (iteration in 1..iterations) {
+      println("Stream performance iteration $iteration")
+      streamPerformance(clients)
     }
   } finally {
     println("Closing clients")
@@ -34,32 +40,45 @@ fun main(args: Array<String>) = runBlocking<Unit> {
   }
 }
 
-private suspend fun performance(clients: List<PgClient>) {
-  val (sum, totalTime) = clients.map { client ->
-    val statement = client.prepare("SELECT i FROM generate_series(1, $1) AS i")
-
-    async {
-      client.transaction {
-
-        var sum = 0L
-        val time = measureTimeMillis {
-          val response = execute(statement, 10L)
-
-          sum = response.sumBy { 1 }.toLong()
+private suspend fun streamPerformance(clients: List<PgClient>) {
+  var sum = 0L
+  val time = measureTimeMillis {
+    sum = clients.map { client ->
+      val statement = client.prepare("SELECT i FROM generate_series(1, $1) AS i")
+      async {
+        val result = client.transaction {
+          execute(statement, rows)!!.sumBy { 1 }.toLong()
         }
-
-        sum to time
+        statement.close()
+        result
       }
-    }
-  }.map {
-    it.await()
-  }.reduce(::pairwiseSum)
+    }.map {
+      it.await()
+    }.sum()
+  }
 
-  val time = totalTime / clients.size
   println("$sum rows in $time ms = ${(sum / (time / 1000.0)).roundToInt()} rows/sec")
 }
 
-private fun pairwiseSum(
-  pair1: Pair<Long, Long>,
-  pair2: Pair<Long, Long>
-) = (pair1.first + pair2.first) to (pair1.second + pair2.second)
+
+private suspend fun queryPerformance(clients: List<PgClient>) {
+  val sum = clients.map { client ->
+    async {
+      val statement = client.prepare("SELECT i FROM generate_series(1, $1) AS i")
+
+      var sum = 0L
+      val end = Instant.now().plus(duration)
+      while (Duration.between(end, Instant.now()).isNegative) {
+        client.transaction { execute(statement, 1L)!!.sumBy { 1 }.toLong() }
+        sum++
+      }
+
+      statement.close()
+      sum
+    }
+  }.map {
+    it.await()
+  }.sum()
+
+  println("$sum queries in ${duration.seconds} secs = ${(sum / duration.seconds)} queries/sec")
+}

@@ -15,9 +15,7 @@ import okio.BufferedSource
  */
 internal object ParseComplete : Message, Message.Factory<ParseComplete> {
   override val id: Int = '1'.toInt()
-  override fun decode(source: BufferedSource): ParseComplete {
-    return ParseComplete
-  }
+  override fun decode(source: BufferedSource) = this
 
   override fun toString() = "ParseComplete"
 }
