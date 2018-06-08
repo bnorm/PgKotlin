@@ -4,12 +4,7 @@ import com.bnorm.pgkotlin.internal.Connection
 import org.intellij.lang.annotations.Language
 import java.net.InetSocketAddress
 
-interface PgClient : TransactionExecutor, NotificationChannel, AutoCloseable {
-  suspend fun prepare(
-    @Language("PostgreSQL") sql: String,
-    name: String? = null
-  ): Statement
-}
+interface PgClient : QueryExecutor, NotificationChannel, AutoCloseable
 
 suspend fun PgClient(
   hostname: String,

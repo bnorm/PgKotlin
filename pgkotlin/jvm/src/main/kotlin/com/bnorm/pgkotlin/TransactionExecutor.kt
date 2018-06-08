@@ -1,7 +1,5 @@
 package com.bnorm.pgkotlin
 
-import org.intellij.lang.annotations.Language
-
 interface TransactionExecutor {
 
   suspend fun begin(): Transaction
@@ -9,24 +7,26 @@ interface TransactionExecutor {
 
 interface Transaction : QueryExecutor {
 
-  suspend fun create(
-    statement: Statement,
-    vararg params: Any? = emptyArray(),
-    name: String? = null
+  suspend fun Statement.bind(
+    name: String,
+    vararg params: Any? = emptyArray()
   ): Portal
 
-  suspend fun create(
-    @Language("PostgreSQL") sql: String,
+  suspend fun Statement.stream(
     vararg params: Any? = emptyArray(),
-    name: String? = null
-  ): Portal
+    batch: Int = 0
+  ): Stream?
+
+  suspend fun Portal.stream(
+    batch: Int = 0
+  ): Stream?
 
   suspend fun commit()
 
   suspend fun rollback()
 }
 
-suspend inline fun <R> TransactionExecutor.transaction(block: QueryExecutor.() -> R): R {
+suspend inline fun <R> TransactionExecutor.transaction(block: Transaction.() -> R): R {
   val txn = begin()
   try {
     val result = txn.block()

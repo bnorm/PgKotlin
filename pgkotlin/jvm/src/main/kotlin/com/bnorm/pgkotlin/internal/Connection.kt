@@ -2,7 +2,6 @@ package com.bnorm.pgkotlin.internal
 
 import com.bnorm.pgkotlin.*
 import com.bnorm.pgkotlin.internal.msg.*
-import com.bnorm.pgkotlin.internal.protocol.NamedStatement
 import com.bnorm.pgkotlin.internal.protocol.Postgres10
 import com.bnorm.pgkotlin.internal.protocol.Protocol
 import kotlinx.coroutines.experimental.channels.BroadcastChannel
@@ -66,29 +65,9 @@ internal class Connection(
   override suspend fun query(
     @Language("PostgreSQL") sql: String,
     vararg params: Any?
-  ): Response? {
-    val portal = if (params.isEmpty()) protocol.simpleQuery(sql)
-    else protocol.extendedQuery(sql, params.toList(), 5000)
-
-    return if (portal == null) null
-    else Response(portal)
-  }
-
-  override suspend fun execute(
-    statement: Statement,
-    vararg params: Any?
-  ): Response? {
-    val namedStatement = statement as? NamedStatement ?: throw IllegalArgumentException()
-    val portal = protocol.execute(namedStatement, params.toList(), 5000)
-
-    return if (portal == null) null
-    else Response(portal)
-  }
-
-  override suspend fun execute(
-    portal: Portal
-  ): Response {
-    TODO("not implemented")
+  ): Result? {
+    return if (params.isEmpty()) protocol.simpleQuery(sql)
+    else protocol.extendedQuery(sql, params.toList())
   }
 
   override fun close() {

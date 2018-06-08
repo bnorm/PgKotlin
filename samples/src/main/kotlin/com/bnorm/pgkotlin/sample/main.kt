@@ -1,6 +1,7 @@
 package com.bnorm.pgkotlin.sample
 
 import com.bnorm.pgkotlin.PgClient
+import com.bnorm.pgkotlin.QueryExecutor
 import com.bnorm.pgkotlin.transaction
 import kotlinx.coroutines.experimental.async
 import kotlinx.coroutines.experimental.channels.sumBy
@@ -13,6 +14,7 @@ import kotlin.system.measureTimeMillis
 val clients = 16
 val iterations = 10
 val rows = 100_000L
+val batch = 5000
 val duration = Duration.ofSeconds(5)
 
 fun main(args: Array<String>) = runBlocking<Unit> {
@@ -40,14 +42,14 @@ fun main(args: Array<String>) = runBlocking<Unit> {
   }
 }
 
-private suspend fun streamPerformance(clients: List<PgClient>) {
+private suspend fun streamPerformance(clients: List<QueryExecutor>) {
   var sum = 0L
   val time = measureTimeMillis {
     sum = clients.map { client ->
       val statement = client.prepare("SELECT i FROM generate_series(1, $1) AS i")
       async {
         val result = client.transaction {
-          execute(statement, rows)!!.sumBy { 1 }.toLong()
+          statement.stream(rows, batch = batch)!!.sumBy { 1 }.toLong()
         }
         statement.close()
         result
@@ -61,7 +63,7 @@ private suspend fun streamPerformance(clients: List<PgClient>) {
 }
 
 
-private suspend fun queryPerformance(clients: List<PgClient>) {
+private suspend fun queryPerformance(clients: List<QueryExecutor>) {
   val sum = clients.map { client ->
     async {
       val statement = client.prepare("SELECT i FROM generate_series(1, $1) AS i")
@@ -69,7 +71,7 @@ private suspend fun queryPerformance(clients: List<PgClient>) {
       var sum = 0L
       val end = Instant.now().plus(duration)
       while (Duration.between(end, Instant.now()).isNegative) {
-        client.transaction { execute(statement, 1L)!!.sumBy { 1 }.toLong() }
+        statement.query(1L)
         sum++
       }
 
