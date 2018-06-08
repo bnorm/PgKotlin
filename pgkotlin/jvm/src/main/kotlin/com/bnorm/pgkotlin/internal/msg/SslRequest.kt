@@ -1,7 +1,6 @@
 package com.bnorm.pgkotlin.internal.msg
 
 import okio.BufferedSink
-import okio.BufferedSource
 
 /**
  * See [PostgreSQL message formats](https://www.postgresql.org/docs/current/static/protocol-message-formats.html)

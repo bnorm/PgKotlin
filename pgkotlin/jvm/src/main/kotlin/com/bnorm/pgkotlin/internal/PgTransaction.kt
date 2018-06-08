@@ -1,58 +1,60 @@
 package com.bnorm.pgkotlin.internal
 
-import com.bnorm.pgkotlin.QueryExecutor
-import com.bnorm.pgkotlin.Response
-import com.bnorm.pgkotlin.Transaction
+import com.bnorm.pgkotlin.*
+import com.bnorm.pgkotlin.internal.protocol.Protocol
 
-internal class PgTransaction(
-  private val executor: QueryExecutor
-) : Transaction {
-  override suspend fun begin(): Transaction {
-    executor.query("SAVEPOINT savepoint_0")
-    return PgNestedTransaction(executor, 0)
+internal abstract class BaseTransaction(
+  private val executor: QueryExecutor,
+  private val protocol: Protocol
+) : QueryExecutor by executor, Transaction {
+
+  override suspend fun Statement.bind(name: String, vararg params: Any?): Portal {
+    return protocol.createPortal(this, params.toList(), name)
   }
 
-  override suspend fun query(sql: String, vararg params: Any?): Response {
-    try {
-      return executor.query(sql, params)
-    } catch (t: Throwable) {
-      rollback()
-      throw t
-    }
+  override suspend fun Statement.stream(vararg params: Any?, batch: Int): Stream? {
+    return protocol.stream(this, params.toList(), batch)
+  }
+
+  override suspend fun Portal.stream(batch: Int): Stream? {
+    return protocol.stream(this, batch)
+  }
+}
+
+internal class PgTransaction(
+  private val executor: QueryExecutor,
+  private val protocol: Protocol
+) : BaseTransaction(executor, protocol) {
+
+  override suspend fun begin(): Transaction {
+    protocol.simpleQuery("SAVEPOINT savepoint_0")
+    return PgNestedTransaction(executor, protocol, 0)
   }
 
   override suspend fun commit() {
-    executor.query("COMMIT TRANSACTION")
+    protocol.simpleQuery("COMMIT TRANSACTION")
   }
 
   override suspend fun rollback() {
-    executor.query("ROLLBACK TRANSACTION")
+    protocol.simpleQuery("ROLLBACK TRANSACTION")
   }
 }
 
 internal class PgNestedTransaction(
   private val executor: QueryExecutor,
+  private val protocol: Protocol,
   private val depth: Int
-) : Transaction {
+) : BaseTransaction(executor, protocol) {
   override suspend fun begin(): Transaction {
-    executor.query("SAVEPOINT savepoint_${depth + 1}")
-    return PgNestedTransaction(executor, depth + 1)
-  }
-
-  override suspend fun query(sql: String, vararg params: Any?): Response {
-    try {
-      return executor.query(sql, params)
-    } catch (t: Throwable) {
-      rollback()
-      throw t
-    }
+    protocol.simpleQuery("SAVEPOINT savepoint_${depth + 1}")
+    return PgNestedTransaction(executor, protocol, depth + 1)
   }
 
   override suspend fun commit() {
-    executor.query("RELEASE SAVEPOINT savepoint_$depth")
+    protocol.simpleQuery("RELEASE SAVEPOINT savepoint_$depth")
   }
 
   override suspend fun rollback() {
-    executor.query("ROLLBACK TO SAVEPOINT savepoint_$depth")
+    protocol.simpleQuery("ROLLBACK TO SAVEPOINT savepoint_$depth")
   }
 }

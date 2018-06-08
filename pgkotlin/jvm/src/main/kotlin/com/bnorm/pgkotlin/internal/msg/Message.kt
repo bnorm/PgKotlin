@@ -1,10 +1,10 @@
 package com.bnorm.pgkotlin.internal.msg
 
+import kotlinx.coroutines.experimental.channels.SendChannel
 import okio.Buffer
 import okio.BufferedSink
 import okio.BufferedSource
 import java.io.IOException
-import kotlin.coroutines.experimental.buildSequence
 
 internal interface Message {
   val id: Int
@@ -18,6 +18,43 @@ internal interface Message {
 
 internal interface Request : Message {
   fun encode(sink: BufferedSink)
+
+  fun writeTo(sink: BufferedSink) {
+    if (id > 0) sink.writeByte(id)
+    val buffer = Buffer()
+    encode(buffer)
+    sink.writeInt(buffer.size().toInt() + 4)
+    sink.writeAll(buffer)
+    sink.emit()
+  }
+
+
+}
+
+internal suspend fun SendChannel<Request>.send(vararg requests: Request) {
+  send(RequestBundle(requests.toList()))
+}
+
+internal data class RequestBundle(
+  val requests: List<Request>
+) : Request {
+  override val id = -1
+
+  override fun encode(sink: BufferedSink) {
+  }
+
+  override fun writeTo(sink: BufferedSink) {
+    val buffer = Buffer()
+    for (request in requests) {
+      with(request) {
+        if (id > 0) sink.writeByte(id)
+        encode(buffer)
+        sink.writeInt(buffer.size().toInt() + 4)
+        sink.writeAll(buffer)
+      }
+    }
+    sink.emit()
+  }
 }
 
 internal fun BufferedSource.readUtf8Terminated(): String {
@@ -32,13 +69,4 @@ internal fun BufferedSource.readUtf8Terminated(): String {
 internal fun BufferedSink.writeUtf8Terminated(utf8: String) {
   writeUtf8(utf8)
   writeByte(0)
-}
-
-internal fun Request.writeTo(sink: BufferedSink) {
-  if (id > 0) sink.writeByte(id)
-  val buffer = Buffer()
-  encode(buffer)
-  sink.writeInt(buffer.size().toInt() + 4)
-  sink.writeAll(buffer)
-  sink.emit()
 }
