@@ -1,8 +1,8 @@
 package com.bnorm.pgkotlin.internal.msg
 
 import com.bnorm.pgkotlin.internal.PgType
+import com.bnorm.pgkotlin.internal.okio.BufferedSource
 import com.bnorm.pgkotlin.internal.toPgType
-import okio.BufferedSource
 
 /**
  * See [PostgreSQL message formats](https://www.postgresql.org/docs/current/static/protocol-message-formats.html)

@@ -1,10 +1,10 @@
 package com.bnorm.pgkotlin.internal.msg
 
+import com.bnorm.pgkotlin.internal.okio.Buffer
+import com.bnorm.pgkotlin.internal.okio.BufferedSink
+import com.bnorm.pgkotlin.internal.okio.BufferedSource
+import com.bnorm.pgkotlin.internal.okio.IOException
 import kotlinx.coroutines.experimental.channels.SendChannel
-import okio.Buffer
-import okio.BufferedSink
-import okio.BufferedSource
-import java.io.IOException
 
 internal interface Message {
   val id: Int
@@ -24,18 +24,16 @@ internal interface Request : Message {
     val buffer = Buffer()
     encode(buffer)
     sink.writeInt(buffer.size().toInt() + 4)
-    sink.writeAll(buffer)
+    sink.write(buffer, buffer.size())
     sink.emit()
   }
-
-
 }
 
 internal suspend fun SendChannel<Request>.send(vararg requests: Request) {
   send(RequestBundle(requests.toList()))
 }
 
-internal data class RequestBundle(
+private data class RequestBundle(
   val requests: List<Request>
 ) : Request {
   override val id = -1
@@ -50,7 +48,7 @@ internal data class RequestBundle(
         if (id > 0) sink.writeByte(id)
         encode(buffer)
         sink.writeInt(buffer.size().toInt() + 4)
-        sink.writeAll(buffer)
+        sink.write(buffer, buffer.size())
       }
     }
     sink.emit()

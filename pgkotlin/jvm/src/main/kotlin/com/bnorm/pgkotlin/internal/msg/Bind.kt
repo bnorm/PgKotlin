@@ -1,6 +1,6 @@
 package com.bnorm.pgkotlin.internal.msg
 
-import okio.BufferedSink
+import com.bnorm.pgkotlin.internal.okio.BufferedSink
 import okio.ByteString
 
 /**

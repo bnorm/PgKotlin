@@ -1,6 +1,6 @@
 package com.bnorm.pgkotlin.internal.msg
 
-import okio.BufferedSource
+import com.bnorm.pgkotlin.internal.okio.BufferedSource
 import okio.ByteString
 
 /**

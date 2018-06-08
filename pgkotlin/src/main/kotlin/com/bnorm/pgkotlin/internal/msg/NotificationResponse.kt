@@ -1,6 +1,6 @@
 package com.bnorm.pgkotlin.internal.msg
 
-import okio.BufferedSource
+import com.bnorm.pgkotlin.internal.okio.BufferedSource
 
 /**
  * See [PostgreSQL message formats](https://www.postgresql.org/docs/current/static/protocol-message-formats.html)
@@ -26,7 +26,8 @@ internal data class NotificationResponse(
 ) : Message {
   override val id: Int = Companion.id
 
-  companion object : Message.Factory<NotificationResponse> {
+  companion object :
+    Message.Factory<NotificationResponse> {
     override val id: Int = 'A'.toInt()
     override fun decode(source: BufferedSource): NotificationResponse {
       return NotificationResponse(

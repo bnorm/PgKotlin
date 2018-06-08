@@ -1,7 +1,6 @@
 package com.bnorm.pgkotlin
 
 import com.bnorm.pgkotlin.internal.Connection
-import org.intellij.lang.annotations.Language
 import java.net.InetSocketAddress
 
 interface PgClient : QueryExecutor, NotificationChannel, AutoCloseable

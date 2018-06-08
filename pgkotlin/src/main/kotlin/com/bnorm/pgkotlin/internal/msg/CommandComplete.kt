@@ -1,6 +1,6 @@
 package com.bnorm.pgkotlin.internal.msg
 
-import okio.BufferedSource
+import com.bnorm.pgkotlin.internal.okio.BufferedSource
 
 /**
  * See [PostgreSQL message formats](https://www.postgresql.org/docs/current/static/protocol-message-formats.html)
@@ -27,11 +27,14 @@ internal data class CommandComplete(
 ) : Message {
   override val id: Int = Companion.id
 
-  companion object : Message.Factory<CommandComplete> {
+  companion object :
+    Message.Factory<CommandComplete> {
     override val id: Int = 'C'.toInt()
     override fun decode(source: BufferedSource): CommandComplete {
       val query = source.readUtf8Terminated()
-      return CommandComplete(query.split(" ".toRegex()).last().toIntOrNull() ?: 0)
+      return CommandComplete(
+        query.split(" ".toRegex()).last().toIntOrNull() ?: 0
+      )
     }
   }
 }
