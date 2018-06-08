@@ -4,6 +4,5 @@ plugins {
 
 dependencies {
   implementation(kotlin("stdlib-common"))
-  implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core-common:0.23.0-dev-1")
-  implementation("org.jetbrains.kotlinx:kotlinx-io:0.0.10")
+  implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core-common:0.23.0")
 }

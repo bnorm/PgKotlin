@@ -22,6 +22,8 @@ plugins {
   id("nebula.release") version "6.3.0"
   // id("nebula.project") version "3.4.1"
   // id("nebula.maven-publish") version "7.0.1"
+
+  id("com.palantir.circle.style") version "1.1.2"
 }
 
 group = "com.bnorm.pgkotlin"
