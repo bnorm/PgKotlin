@@ -27,16 +27,15 @@ jobs:
       # Download and cache dependencies
       - restore_cache:
           keys:
-          - pgkotlin-{{ checksum "build.gradle" }}
+          - pgkotlin-{{ checksum "build.gradle.kts" }}
           # fallback to using the latest cache if no exact match is found
           - pgkotlin-
 
-      - run: gradle dependencies
+      - run: ./gradlew dependencies
 
       - save_cache:
           paths:
             - ~/.gradle
-          key: pgkotlin-{{ checksum "build.gradle" }}
+          key: pgkotlin-{{ checksum "build.gradle.kts" }}
 
-      # run tests!
-      - run: gradle test
+      - run: ./gradlew build
