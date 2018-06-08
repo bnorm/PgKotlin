@@ -1,8 +1,6 @@
 package com.bnorm.pgkotlin.internal.msg
 
-import com.bnorm.pgkotlin.internal.PgType
 import com.bnorm.pgkotlin.internal.okio.BufferedSource
-import com.bnorm.pgkotlin.internal.toPgType
 
 /**
  * See [PostgreSQL message formats](https://www.postgresql.org/docs/current/static/protocol-message-formats.html)
@@ -21,16 +19,17 @@ import com.bnorm.pgkotlin.internal.toPgType
  * </pre>
  */
 internal data class ParameterDescription(
-  val types: List<PgType<*>>
+  val types: List<Int>
 ) : Message {
   override val id: Int = Companion.id
 
-  companion object : Message.Factory<ParameterDescription> {
+  companion object :
+    Message.Factory<ParameterDescription> {
     override val id: Int = 't'.toInt()
     override fun decode(source: BufferedSource): ParameterDescription {
       val count = source.readShort()
       val oids = List(count.toInt()) {
-        source.readInt().toPgType()
+        source.readInt()
       }
       return ParameterDescription(oids)
     }

@@ -1,8 +1,6 @@
 package com.bnorm.pgkotlin.internal.msg
 
-import com.bnorm.pgkotlin.internal.PgType
 import com.bnorm.pgkotlin.internal.okio.BufferedSource
-import com.bnorm.pgkotlin.internal.toPgType
 
 /**
  * See [PostgreSQL message formats](https://www.postgresql.org/docs/current/static/protocol-message-formats.html)
@@ -45,7 +43,7 @@ internal data class RowDescription(
         val name = source.readUtf8Terminated()
         val objectId = source.readInt()
         val attributeNumber = source.readShort().toInt()
-        val type = source.readInt().toPgType()
+        val type = source.readInt()
         val typeLength = source.readShort().toInt()
         val typeModifier = source.readInt()
         val formatCode = source.readShort().toInt()
@@ -68,7 +66,7 @@ internal data class ColumnDescription(
   val name: String,
   val objectId: Int,
   val attributeNumber: Int,
-  val type: PgType<*>,
+  val type: Int,
   val typeLength: Int,
   val typeModifier: Int,
   val formatCode: Int

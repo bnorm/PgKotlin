@@ -1,8 +1,9 @@
 package com.bnorm.pgkotlin.internal.msg
 
 import com.bnorm.pgkotlin.internal.okio.BufferedSink
-import okio.Buffer
-import okio.ByteString
+import com.bnorm.pgkotlin.internal.okio.Buffer
+import com.bnorm.pgkotlin.internal.okio.ByteString
+import com.bnorm.pgkotlin.internal.okio.encodeUtf8
 
 /**
  * See [PostgreSQL message formats](https://www.postgresql.org/docs/current/static/protocol-message-formats.html)
@@ -23,7 +24,7 @@ internal data class PasswordMessage private constructor(
 ) : Request {
   override val id: Int = 'p'.toInt()
   override fun encode(sink: BufferedSink) {
-    sink.write(hash ?: ByteString.encodeUtf8(password))
+    sink.write(hash ?: encodeUtf8(password))
     sink.writeByte(0)
   }
 
@@ -41,7 +42,10 @@ internal data class PasswordMessage private constructor(
         write(salt)
       }.readByteString().md5().hex()
 
-      return PasswordMessage(password, ByteString.encodeUtf8("md5$md5"))
+      return PasswordMessage(
+        password,
+        encodeUtf8("md5$md5")
+      )
     }
   }
 }
