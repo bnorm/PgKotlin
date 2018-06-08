@@ -35,14 +35,15 @@ import okio.ByteString
  */
 internal data class Bind(
   private val params: List<ByteString?>,
+  private val portal: String = "",
   private val preparedStatement: String = "",
-  private val portal: String = ""
+  private val formatCode: Int = 0
 ) : Request {
   override val id: Int = 'B'.toInt()
   override fun encode(sink: BufferedSink) {
     sink.writeUtf8Terminated(portal)
     sink.writeUtf8Terminated(preparedStatement)
-    sink.writeShort(0) // format codes
+    sink.writeShort(formatCode)
     sink.writeShort(params.size)
     for (param in params) {
       if (param != null) {

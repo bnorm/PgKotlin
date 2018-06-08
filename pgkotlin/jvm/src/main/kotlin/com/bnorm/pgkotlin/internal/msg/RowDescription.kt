@@ -43,14 +43,33 @@ internal data class RowDescription(
       val len = source.readShort().toInt()
       val columns = List(len) {
         val name = source.readUtf8Terminated()
-        source.skip(6)
+        val objectId = source.readInt()
+        val attributeNumber = source.readShort().toInt()
         val type = source.readInt().toPgType()
-        source.skip(8)
-        ColumnDescription(name, type)
+        val typeLength = source.readShort().toInt()
+        val typeModifier = source.readInt()
+        val formatCode = source.readShort().toInt()
+        ColumnDescription(
+          name,
+          objectId,
+          attributeNumber,
+          type,
+          typeLength,
+          typeModifier,
+          formatCode
+        )
       }
       return RowDescription(columns)
     }
   }
 }
 
-internal data class ColumnDescription(val name: String, val type: PgType<*>)
+internal data class ColumnDescription(
+  val name: String,
+  val objectId: Int,
+  val attributeNumber: Int,
+  val type: PgType<*>,
+  val typeLength: Int,
+  val typeModifier: Int,
+  val formatCode: Int
+)
