@@ -16,6 +16,5 @@ import com.bnorm.pgkotlin.internal.okio.BufferedSource
 internal object EmptyQueryResponse : Message, Message.Factory<EmptyQueryResponse> {
   override val id: Int = 'I'.toInt()
   override fun decode(source: BufferedSource) = this
-
   override fun toString() = "EmptyQueryResponse"
 }

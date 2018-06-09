@@ -23,8 +23,7 @@ internal data class ParameterStatus(
 ) : Message {
   override val id: Int = Companion.id
 
-  companion object :
-    Message.Factory<ParameterStatus> {
+  companion object : Message.Factory<ParameterStatus> {
     override val id: Int = 'S'.toInt()
     override fun decode(source: BufferedSource): ParameterStatus {
       val name = source.readUtf8Terminated()

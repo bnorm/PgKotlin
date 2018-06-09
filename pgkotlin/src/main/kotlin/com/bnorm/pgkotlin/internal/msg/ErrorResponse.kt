@@ -29,8 +29,7 @@ internal data class ErrorResponse(
     ERROR, FATAL, PANIC, WARNING, NOTICE, DEBUG, INFO, LOG
   }
 
-  companion object :
-    Message.Factory<ErrorResponse> {
+  companion object : Message.Factory<ErrorResponse> {
     override val id: Int = 'E'.toInt()
     override fun decode(source: BufferedSource): ErrorResponse {
       var level: Level? = null

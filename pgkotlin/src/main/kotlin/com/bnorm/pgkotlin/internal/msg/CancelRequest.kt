@@ -27,4 +27,10 @@ internal data class CancelRequest(
     sink.writeInt(processId)
     sink.writeInt(secretKey)
   }
+
+  override fun writeTo(sink: BufferedSink) {
+    sink.writeByte(id)
+    sink.writeInt(16)
+    encode(sink)
+  }
 }

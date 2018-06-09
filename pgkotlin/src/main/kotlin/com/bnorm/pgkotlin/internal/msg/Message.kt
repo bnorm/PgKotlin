@@ -25,7 +25,6 @@ internal interface Request : Message {
     encode(buffer)
     sink.writeInt(buffer.size().toInt() + 4)
     sink.write(buffer, buffer.size())
-    sink.emit()
   }
 }
 
@@ -51,7 +50,6 @@ private data class RequestBundle(
         sink.write(buffer, buffer.size())
       }
     }
-    sink.emit()
   }
 }
 

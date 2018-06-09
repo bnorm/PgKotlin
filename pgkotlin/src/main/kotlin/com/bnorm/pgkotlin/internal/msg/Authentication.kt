@@ -40,26 +40,16 @@ internal data class Authentication(
 ) : Message {
   override val id: Int = Companion.id
 
-  companion object :
-    Message.Factory<Authentication> {
+  companion object : Message.Factory<Authentication> {
     private const val OK = 0
     private const val CLEARTEXT_PASSWORD = 3
     private const val PASSWORD_MD5_CHALLENGE = 5
 
     override val id: Int = 'R'.toInt()
     override fun decode(source: BufferedSource) = when (source.readInt()) {
-      OK -> Authentication(
-        true,
-        null
-      )
-      CLEARTEXT_PASSWORD -> Authentication(
-        false,
-        null
-      )
-      PASSWORD_MD5_CHALLENGE -> Authentication(
-        false,
-        source.readByteString(4)
-      )
+      OK -> Authentication(true, null)
+      CLEARTEXT_PASSWORD -> Authentication(false, null)
+      PASSWORD_MD5_CHALLENGE -> Authentication(false, source.readByteString(4))
       else -> TODO()
     }
   }

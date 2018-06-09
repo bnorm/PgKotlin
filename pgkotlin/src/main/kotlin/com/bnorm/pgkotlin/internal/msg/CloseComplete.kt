@@ -16,6 +16,5 @@ import com.bnorm.pgkotlin.internal.okio.BufferedSource
 internal object CloseComplete : Message, Message.Factory<CloseComplete> {
   override val id: Int = '3'.toInt()
   override fun decode(source: BufferedSource) = this
-
   override fun toString() = "CloseComplete"
 }

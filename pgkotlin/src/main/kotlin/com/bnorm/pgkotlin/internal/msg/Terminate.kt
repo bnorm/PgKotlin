@@ -17,5 +17,10 @@ internal object Terminate : Request {
   override val id: Int = 'X'.toInt()
   override fun encode(sink: BufferedSink) {}
 
+  override fun writeTo(sink: BufferedSink) {
+    sink.writeByte(id)
+    sink.writeInt(4)
+  }
+
   override fun toString() = "Terminate"
 }

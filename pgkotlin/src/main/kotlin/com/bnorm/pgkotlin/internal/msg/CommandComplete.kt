@@ -27,8 +27,7 @@ internal data class CommandComplete(
 ) : Message {
   override val id: Int = Companion.id
 
-  companion object :
-    Message.Factory<CommandComplete> {
+  companion object : Message.Factory<CommandComplete> {
     override val id: Int = 'C'.toInt()
     override fun decode(source: BufferedSource): CommandComplete {
       val query = source.readUtf8Terminated()

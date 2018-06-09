@@ -23,8 +23,7 @@ internal data class ParameterDescription(
 ) : Message {
   override val id: Int = Companion.id
 
-  companion object :
-    Message.Factory<ParameterDescription> {
+  companion object : Message.Factory<ParameterDescription> {
     override val id: Int = 't'.toInt()
     override fun decode(source: BufferedSource): ParameterDescription {
       val count = source.readShort()

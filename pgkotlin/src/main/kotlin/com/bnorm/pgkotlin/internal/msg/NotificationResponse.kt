@@ -26,8 +26,7 @@ internal data class NotificationResponse(
 ) : Message {
   override val id: Int = Companion.id
 
-  companion object :
-    Message.Factory<NotificationResponse> {
+  companion object : Message.Factory<NotificationResponse> {
     override val id: Int = 'A'.toInt()
     override fun decode(source: BufferedSource): NotificationResponse {
       return NotificationResponse(

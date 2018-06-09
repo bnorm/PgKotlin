@@ -25,8 +25,7 @@ internal data class ReadyForQuery(
     None, Active, Failed
   }
 
-  companion object :
-    Message.Factory<ReadyForQuery> {
+  companion object : Message.Factory<ReadyForQuery> {
     override val id: Int = 'Z'.toInt()
 
     override fun decode(source: BufferedSource): ReadyForQuery {

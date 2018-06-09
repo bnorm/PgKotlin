@@ -16,6 +16,5 @@ import com.bnorm.pgkotlin.internal.okio.BufferedSource
 internal object BindComplete : Message, Message.Factory<BindComplete> {
   override val id: Int = '2'.toInt()
   override fun decode(source: BufferedSource) = this
-
   override fun toString() = "BindComplete"
 }

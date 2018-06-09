@@ -16,6 +16,5 @@ import com.bnorm.pgkotlin.internal.okio.BufferedSource
 internal object PortalSuspended : Message, Message.Factory<PortalSuspended> {
   override val id: Int = 's'.toInt()
   override fun decode(source: BufferedSource) = this
-
   override fun toString() = "PortalSuspended"
 }
