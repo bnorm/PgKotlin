@@ -17,12 +17,14 @@ val rows = 100_000L
 val batch = 5000
 val duration = Duration.ofSeconds(5)
 
-fun main(args: Array<String>) = runBlocking<Unit> {
+fun main(args: Array<String>): Unit = runBlocking {
   val clients = List(clients) {
     PgClient(
       hostname = "dev-brian-norman.dc.atavium.com",
+      port = 5432,
       database = "postgres",
-      username = "postgres"
+      username = "postgres",
+      password = null
     )
   }
 

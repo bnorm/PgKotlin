@@ -3,14 +3,16 @@ package com.bnorm.pgkotlin
 import com.bnorm.pgkotlin.internal.Connection
 import java.net.InetSocketAddress
 
-interface PgClient : QueryExecutor, NotificationChannel, AutoCloseable
+actual interface PgClient : QueryExecutor, NotificationChannel {
+  actual suspend fun close()
+}
 
-suspend fun PgClient(
+actual suspend fun PgClient(
   hostname: String,
-  port: Int = 5432,
-  database: String = "postgres",
-  username: String = "postgres",
-  password: String? = null
+  port: Int,
+  database: String,
+  username: String,
+  password: String?
 ): PgClient = PgClient(InetSocketAddress(hostname, port), database, username, password)
 
 suspend fun PgClient(

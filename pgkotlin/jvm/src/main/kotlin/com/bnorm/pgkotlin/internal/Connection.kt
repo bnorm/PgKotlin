@@ -1,6 +1,9 @@
 package com.bnorm.pgkotlin.internal
 
-import com.bnorm.pgkotlin.*
+import com.bnorm.pgkotlin.PgClient
+import com.bnorm.pgkotlin.Result
+import com.bnorm.pgkotlin.Statement
+import com.bnorm.pgkotlin.Transaction
 import com.bnorm.pgkotlin.internal.msg.*
 import com.bnorm.pgkotlin.internal.protocol.Postgres10
 import com.bnorm.pgkotlin.internal.protocol.Protocol
@@ -23,7 +26,7 @@ import java.util.concurrent.atomic.AtomicInteger
 internal class Connection(
   private val protocol: Protocol,
   private val channels: MutableMap<String, BroadcastChannel<String>>
-) : PgClient, QueryExecutor, AutoCloseable {
+) : PgClient {
 
   private val statementCount = AtomicInteger(0)
 
@@ -70,10 +73,8 @@ internal class Connection(
     else protocol.extendedQuery(sql, params.toList())
   }
 
-  override fun close() {
-    runBlocking {
-      protocol.terminate()
-    }
+  override suspend fun close() {
+    protocol.terminate()
   }
 
   companion object {
