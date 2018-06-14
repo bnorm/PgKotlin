@@ -1,6 +1,6 @@
 package com.bnorm.pgkotlin
 
-interface QueryExecutor : TransactionExecutor {
+interface QueryExecutor {
 
   suspend fun prepare(
     sql: String,
@@ -14,4 +14,6 @@ interface QueryExecutor : TransactionExecutor {
     sql: String,
     vararg params: Any? = emptyArray()
   ): Result?
+
+  suspend fun begin(): Transaction
 }

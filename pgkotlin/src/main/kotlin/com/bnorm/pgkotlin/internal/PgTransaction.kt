@@ -7,6 +7,9 @@ internal abstract class BaseTransaction(
   private val executor: QueryExecutor,
   private val protocol: Protocol
 ) : QueryExecutor by executor, Transaction {
+  override suspend fun stream(sql: String, vararg params: Any?, batch: Int): Stream? {
+    return protocol.stream(sql, params.toList(), batch)
+  }
 
   override suspend fun Statement.bind(name: String, vararg params: Any?): Portal {
     return protocol.createPortal(this, params.toList(), name)

@@ -28,6 +28,8 @@ internal interface Protocol {
 
   suspend fun execute(statement: Statement, params: List<Any?>): Result?
 
+  suspend fun stream(sql: String, params: List<Any?>, rows: Int): Stream?
+
   suspend fun stream(statement: Statement, params: List<Any?>, rows: Int): Stream?
 
   suspend fun stream(portal: Portal, rows: Int): Stream?

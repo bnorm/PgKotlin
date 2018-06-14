@@ -118,7 +118,7 @@ internal class Connection(
       val channels = mutableMapOf<String, BroadcastChannel<String>>()
       val responses = source(socket, channels)
 
-      val protocol = Postgres10(requests, responses)
+      val protocol = Postgres10(requests, responses, { pgEncode() })
 
       protocol.startup(username, password, database)
 

@@ -11,7 +11,7 @@ import java.time.Instant
 import kotlin.math.roundToInt
 import kotlin.system.measureTimeMillis
 
-val clients = 16
+val clients = 1
 val iterations = 10
 val rows = 100_000L
 val batch = 5000
@@ -48,13 +48,10 @@ private suspend fun streamPerformance(clients: List<QueryExecutor>) {
   var sum = 0L
   val time = measureTimeMillis {
     sum = clients.map { client ->
-      val statement = client.prepare("SELECT i FROM generate_series(1, $1) AS i")
       async {
-        val result = client.transaction {
-          statement.stream(rows, batch = batch)!!.sumBy { 1 }.toLong()
+        client.transaction {
+          stream("SELECT i FROM generate_series(1, $1) AS i", rows, batch = batch)!!.sumBy { 1 }.toLong()
         }
-        statement.close()
-        result
       }
     }.map {
       it.await()

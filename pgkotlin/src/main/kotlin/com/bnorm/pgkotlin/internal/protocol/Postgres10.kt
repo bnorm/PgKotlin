@@ -6,19 +6,20 @@ import com.bnorm.pgkotlin.Statement
 import com.bnorm.pgkotlin.Stream
 import com.bnorm.pgkotlin.internal.PgProtocolException
 import com.bnorm.pgkotlin.internal.msg.*
-import com.bnorm.pgkotlin.internal.pgEncode
+import com.bnorm.pgkotlin.internal.okio.ByteString
 import kotlinx.coroutines.experimental.NonCancellable
 import kotlinx.coroutines.experimental.Unconfined
 import kotlinx.coroutines.experimental.channels.ReceiveChannel
 import kotlinx.coroutines.experimental.channels.SendChannel
 import kotlinx.coroutines.experimental.channels.produce
+import kotlinx.coroutines.experimental.timeunit.TimeUnit
 import kotlinx.coroutines.experimental.withContext
 import kotlinx.coroutines.experimental.withTimeout
-import java.util.concurrent.TimeUnit
 
 internal class Postgres10(
   private val requests: SendChannel<Request>,
-  private val responses: ReceiveChannel<Message>
+  private val responses: ReceiveChannel<Message>,
+  private val encoder: Any?.() -> ByteString?
 ) : Protocol {
   override suspend fun startup(
     username: String,
@@ -104,7 +105,7 @@ internal class Postgres10(
 
     requests.send(
       Parse(sql),
-      Bind(params.map { it.pgEncode() }),
+      Bind(params.map { it.encoder() }),
       Describe(StatementType.Portal),
       Execute(),
       Sync
@@ -169,7 +170,7 @@ internal class Postgres10(
 
     requests.send(
       Parse(sql),
-      Bind(params.map { it.pgEncode() }, portal = name),
+      Bind(params.map { it.encoder() }, portal = name),
       Sync
     )
 
@@ -190,7 +191,7 @@ internal class Postgres10(
 
     requests.send(
       Bind(
-        params.map { it.pgEncode() },
+        params.map { it.encoder() },
         preparedStatement = statement.name,
         portal = name
       ),
@@ -221,7 +222,7 @@ internal class Postgres10(
     // https://www.postgresql.org/docs/current/static/protocol-flow.html#PROTOCOL-FLOW-EXT-QUERY
 
     requests.send(
-      Bind(params.map { it.pgEncode() }, preparedStatement = statement.name),
+      Bind(params.map { it.encoder() }, preparedStatement = statement.name),
       Describe(StatementType.Portal),
       Execute(),
       Sync
@@ -249,6 +250,35 @@ internal class Postgres10(
   }
 
   override suspend fun stream(
+    sql: String,
+    params: List<Any?>,
+    rows: Int
+  ): Stream? {
+    // https://www.postgresql.org/docs/current/static/protocol-flow.html#PROTOCOL-FLOW-EXT-QUERY
+
+    requests.send(
+      Parse(sql),
+      Bind(params.map { it.encoder() }),
+      Describe(StatementType.Portal),
+      Execute(rows = rows),
+      Sync
+    )
+
+    responses.receive<ParseComplete>()
+    responses.receive<BindComplete>()
+    val response = responses.receive()
+    return when (response) {
+      is NoData -> {
+        responses.receive<CommandComplete>()
+        responses.receive<ReadyForQuery>()
+        null
+      }
+      is RowDescription -> createPortal(response, rows)
+      else -> throw PgProtocolException("msg=$response")
+    }
+  }
+
+  override suspend fun stream(
     statement: Statement,
     params: List<Any?>,
     rows: Int
@@ -256,7 +286,7 @@ internal class Postgres10(
     // https://www.postgresql.org/docs/current/static/protocol-flow.html#PROTOCOL-FLOW-EXT-QUERY
 
     requests.send(
-      Bind(params.map { it.pgEncode() }, preparedStatement = statement.name),
+      Bind(params.map { it.encoder() }, preparedStatement = statement.name),
       Describe(StatementType.Portal),
       Execute(rows = rows),
       Sync
