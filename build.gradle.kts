@@ -10,8 +10,8 @@ buildscript {
     maven { setUrl("https://dl.bintray.com/jetbrains/kotlin-native-dependencies") }
   }
   dependencies {
-    classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:1.2.41")
-    classpath("org.jetbrains.kotlin:kotlin-native-gradle-plugin:0.6.2")
+    classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:${properties["kotlin_version"]}")
+    classpath("org.jetbrains.kotlin:kotlin-native-gradle-plugin:${properties["native_version"]}")
   }
 }
 
@@ -21,12 +21,14 @@ plugins {
 
   id("nebula.release") version "6.3.0"
   // id("nebula.project") version "3.4.1"
-  // id("nebula.maven-publish") version "7.0.1"
+  id("nebula.maven-publish") version "7.0.1"
 
   id("com.palantir.circle.style") version "1.1.2"
 }
 
-group = "com.bnorm.pgkotlin"
+allprojects {
+  group = "com.bnorm.pgkotlin"
+}
 
 //release {
 //  defaultVersionStrategy = Strategies.SNAPSHOT

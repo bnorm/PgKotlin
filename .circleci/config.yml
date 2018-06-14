@@ -36,6 +36,7 @@ jobs:
       - save_cache:
           paths:
             - ~/.gradle
+            - ~/.konan
           key: pgkotlin-{{ checksum "build.gradle.kts" }}
 
       - run: ./gradlew build
