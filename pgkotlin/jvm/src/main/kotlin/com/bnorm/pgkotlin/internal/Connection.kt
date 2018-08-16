@@ -61,8 +61,7 @@ internal class Connection(
   }
 
   override suspend fun begin(): Transaction {
-    query("BEGIN TRANSACTION")
-    return PgTransaction(this, protocol)
+    return protocol.beginTransaction(this)
   }
 
   override suspend fun query(
