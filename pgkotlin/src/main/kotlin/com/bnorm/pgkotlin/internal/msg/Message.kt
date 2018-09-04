@@ -6,6 +6,25 @@ import com.bnorm.pgkotlin.internal.okio.BufferedSource
 import com.bnorm.pgkotlin.internal.okio.IOException
 import kotlinx.coroutines.experimental.channels.SendChannel
 
+internal val factories = listOf<Message.Factory<*>>(
+  Authentication,
+  BackendKeyData,
+  BindComplete,
+  CloseComplete,
+  CommandComplete,
+  DataRow,
+  EmptyQueryResponse,
+  ErrorResponse,
+  NoData,
+  NotificationResponse,
+  ParameterDescription,
+  ParameterStatus,
+  ParseComplete,
+  PortalSuspended,
+  ReadyForQuery,
+  RowDescription
+).associateBy { it.id }
+
 internal interface Message {
   val id: Int
 
@@ -23,8 +42,8 @@ internal interface Request : Message {
     if (id > 0) sink.writeByte(id)
     val buffer = Buffer()
     encode(buffer)
-    sink.writeInt(buffer.size().toInt() + 4)
-    sink.write(buffer, buffer.size())
+    sink.writeInt(buffer.size.toInt() + 4)
+    sink.write(buffer, buffer.size)
   }
 }
 
@@ -46,8 +65,8 @@ private data class RequestBundle(
       with(request) {
         if (id > 0) sink.writeByte(id)
         encode(buffer)
-        sink.writeInt(buffer.size().toInt() + 4)
-        sink.write(buffer, buffer.size())
+        sink.writeInt(buffer.size.toInt() + 4)
+        sink.write(buffer, buffer.size)
       }
     }
   }

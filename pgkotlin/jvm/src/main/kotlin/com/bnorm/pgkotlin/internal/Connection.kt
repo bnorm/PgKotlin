@@ -77,25 +77,6 @@ internal class Connection(
   }
 
   companion object {
-    private val factories = listOf<Message.Factory<*>>(
-      Authentication,
-      BackendKeyData,
-      BindComplete,
-      CloseComplete,
-      CommandComplete,
-      DataRow,
-      EmptyQueryResponse,
-      ErrorResponse,
-      NoData,
-      NotificationResponse,
-      ParameterDescription,
-      ParameterStatus,
-      ParseComplete,
-      PortalSuspended,
-      ReadyForQuery,
-      RowDescription
-    ).associateBy { it.id }
-
     suspend fun connect(
       hostname: String = "localhost",
       port: Int = 5432,
@@ -132,7 +113,7 @@ internal class Connection(
         for (msg in channel) {
           msg.writeTo(buffer)
           debug { println("sending=$msg") }
-          socket.aWrite(buffer, buffer.size(), cursor)
+          socket.aWrite(buffer, buffer.size, cursor)
         }
       }
     }
@@ -145,11 +126,11 @@ internal class Connection(
       val cursor = Buffer.UnsafeCursor()
 
       while (socket.isOpen && isActive) {
-        while (buffer.size() < 5) socket.aRead(buffer, cursor)
+        while (buffer.size < 5) socket.aRead(buffer, cursor)
 
         val id = buffer.readByte()
         val length = (buffer.readInt() - 4).toLong()
-        while (buffer.size() < length) socket.aRead(buffer, cursor)
+        while (buffer.size < length) socket.aRead(buffer, cursor)
 
         val msg = factories[id.toInt()]?.decode(buffer)
         debug { println("received=$msg") }
@@ -172,7 +153,7 @@ private suspend fun AsynchronousSocketChannel.aRead(
   cursor: Buffer.UnsafeCursor
 ): Long {
   buffer.readAndWriteUnsafe(cursor).use {
-    val oldSize = buffer.size()
+    val oldSize = buffer.size
     cursor.expandBuffer(8192)
 
     val read = aRead(ByteBuffer.wrap(cursor.data, cursor.start, 8192))
@@ -186,10 +167,10 @@ private suspend fun AsynchronousSocketChannel.aRead(
   }
 }
 
-suspend fun AsynchronousSocketChannel.aWrite(
+private suspend fun AsynchronousSocketChannel.aWrite(
   buffer: Buffer,
   byteCount: Long,
-  cursor: Buffer.UnsafeCursor = Buffer.UnsafeCursor()
+  cursor: Buffer.UnsafeCursor
 ) {
   var remaining = byteCount
   while (remaining > 0) {

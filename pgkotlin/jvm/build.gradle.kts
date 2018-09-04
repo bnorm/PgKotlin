@@ -8,5 +8,5 @@ dependencies {
   implementation(kotlin("stdlib-jdk8"))
   implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:${properties["coroutines_version"]}")
   implementation("org.jetbrains.kotlinx:kotlinx-coroutines-nio:${properties["coroutines_version"]}")
-  implementation("com.squareup.okio:okio:1.14.0")
+  implementation("com.squareup.okio:okio:2.0.0")
 }

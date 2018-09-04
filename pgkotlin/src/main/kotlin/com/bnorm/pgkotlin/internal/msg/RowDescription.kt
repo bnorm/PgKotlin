@@ -54,7 +54,7 @@ internal data class RowDescription(
           type,
           typeLength,
           typeModifier,
-          formatCode
+          FormatType.valueOf(formatCode)
         )
       }
       return RowDescription(columns)
@@ -69,5 +69,5 @@ internal data class ColumnDescription(
   val type: Int,
   val typeLength: Int,
   val typeModifier: Int,
-  val formatCode: Int
+  val format: FormatType
 )

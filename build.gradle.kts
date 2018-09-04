@@ -1,6 +1,7 @@
 import org.jetbrains.kotlin.gradle.dsl.Coroutines
 import org.jetbrains.kotlin.gradle.dsl.KotlinJvmCompile
 import org.jetbrains.kotlin.gradle.dsl.KotlinProjectExtension
+import org.jetbrains.kotlin.gradle.plugin.KotlinPlatformPluginBase
 import org.jetbrains.kotlin.gradle.plugin.KotlinPluginWrapper
 
 buildscript {
@@ -41,7 +42,7 @@ allprojects {
     jcenter()
   }
 
-  plugins.withType<KotlinPluginWrapper> {
+  plugins.withType<KotlinPlatformPluginBase> {
     configure<KotlinProjectExtension> {
       experimental.coroutines = Coroutines.ENABLE
     }
