@@ -3,9 +3,9 @@ package com.bnorm.pgkotlin.sample
 import com.bnorm.pgkotlin.PgClient
 import com.bnorm.pgkotlin.QueryExecutor
 import com.bnorm.pgkotlin.transaction
-import kotlinx.coroutines.experimental.async
-import kotlinx.coroutines.experimental.channels.sumBy
-import kotlinx.coroutines.experimental.runBlocking
+import kotlinx.coroutines.async
+import kotlinx.coroutines.channels.sumBy
+import kotlinx.coroutines.runBlocking
 import java.time.Duration
 import java.time.Instant
 import kotlin.math.roundToInt

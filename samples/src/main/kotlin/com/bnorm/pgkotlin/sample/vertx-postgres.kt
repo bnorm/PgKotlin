@@ -4,12 +4,14 @@ import io.reactiverse.pgclient.PgClient
 import io.reactiverse.pgclient.PgPoolOptions
 import io.reactiverse.pgclient.PgResult
 import io.reactiverse.pgclient.Row
-import kotlinx.coroutines.experimental.DefaultDispatcher
-import kotlinx.coroutines.experimental.runBlocking
-import kotlinx.coroutines.experimental.withContext
+import kotlinx.coroutines.DefaultDispatcher
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import java.time.Duration
 import java.time.Instant
-import kotlin.coroutines.experimental.suspendCoroutine
+import kotlin.coroutines.suspendCoroutine
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 fun main(args: Array<String>) = runBlocking<Unit> {
   // Pool options

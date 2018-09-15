@@ -2,7 +2,7 @@ package com.bnorm.pgkotlin.internal.protocol
 
 import com.bnorm.pgkotlin.internal.msg.DataRow
 import com.bnorm.pgkotlin.internal.msg.RowDescription
-import kotlinx.coroutines.experimental.channels.ReceiveChannel
+import kotlinx.coroutines.channels.ReceiveChannel
 
 internal abstract class RowStream internal constructor(
   val description: RowDescription,

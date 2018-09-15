@@ -8,6 +8,7 @@ buildscript {
   repositories {
     jcenter()
     maven { setUrl("http://kotlin.bintray.com/kotlinx") }
+    maven { setUrl("http://dl.bintray.com/kotlin/kotlin-eap") }
     maven { setUrl("https://dl.bintray.com/jetbrains/kotlin-native-dependencies") }
   }
   dependencies {
@@ -40,6 +41,7 @@ tasks["release"].finalizedBy(tasks["publish"])
 allprojects {
   repositories {
     jcenter()
+    maven { setUrl("http://dl.bintray.com/kotlin/kotlin-eap") }
   }
 
   plugins.withType<KotlinPlatformPluginBase> {

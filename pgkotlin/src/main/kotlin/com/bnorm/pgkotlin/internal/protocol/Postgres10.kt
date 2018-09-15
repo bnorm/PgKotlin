@@ -4,14 +4,14 @@ import com.bnorm.pgkotlin.*
 import com.bnorm.pgkotlin.internal.PgProtocolException
 import com.bnorm.pgkotlin.internal.msg.*
 import com.bnorm.pgkotlin.internal.okio.ByteString
-import kotlinx.coroutines.experimental.NonCancellable
-import kotlinx.coroutines.experimental.Unconfined
-import kotlinx.coroutines.experimental.channels.ReceiveChannel
-import kotlinx.coroutines.experimental.channels.SendChannel
-import kotlinx.coroutines.experimental.channels.produce
-import kotlinx.coroutines.experimental.timeunit.TimeUnit
-import kotlinx.coroutines.experimental.withContext
-import kotlinx.coroutines.experimental.withTimeout
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.Unconfined
+import kotlinx.coroutines.channels.ReceiveChannel
+import kotlinx.coroutines.channels.SendChannel
+import kotlinx.coroutines.channels.produce
+import kotlinx.coroutines.timeunit.TimeUnit
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 
 internal class Postgres10(
   private val requests: SendChannel<Request>,
