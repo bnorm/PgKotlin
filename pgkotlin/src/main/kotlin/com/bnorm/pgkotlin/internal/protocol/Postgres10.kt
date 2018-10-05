@@ -4,19 +4,17 @@ import com.bnorm.pgkotlin.*
 import com.bnorm.pgkotlin.internal.PgProtocolException
 import com.bnorm.pgkotlin.internal.msg.*
 import com.bnorm.pgkotlin.internal.okio.ByteString
-import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.Unconfined
+import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.channels.SendChannel
 import kotlinx.coroutines.channels.produce
 import kotlinx.coroutines.timeunit.TimeUnit
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeout
 
 internal class Postgres10(
   private val requests: SendChannel<Request>,
   private val responses: ReceiveChannel<Message>,
-  private val encoder: Any?.() -> ByteString?
+  private val encoder: Any?.() -> ByteString?,
+  private val scope: CoroutineScope
 ) : Protocol {
   override suspend fun startup(
     username: String,
@@ -338,9 +336,9 @@ internal class Postgres10(
   ): Stream {
     // Buffer 1 less than the number of possible rows to keep additional
     // executions from being sent
-    val data: ReceiveChannel<Row> = produce(
+    val data: ReceiveChannel<Row> = scope.produce(
       capacity = (rows - 1).coerceAtLeast(0),
-      context = Unconfined
+      context = Dispatchers.Unconfined
     ) {
       for (msg in responses) {
         when (msg) {

@@ -5,6 +5,7 @@ import com.bnorm.pgkotlin.QueryExecutor
 import com.bnorm.pgkotlin.transaction
 import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.sumBy
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.runBlocking
 import java.time.Duration
 import java.time.Instant
@@ -44,13 +45,13 @@ fun main(args: Array<String>): Unit = runBlocking {
   }
 }
 
-private suspend fun streamPerformance(clients: List<QueryExecutor>) {
+private suspend fun streamPerformance(clients: List<QueryExecutor>): Unit = coroutineScope {
   var sum = 0L
   val time = measureTimeMillis {
     sum = clients.map { client ->
       async {
         client.transaction {
-          stream("SELECT i FROM generate_series(1, $1) AS i", rows, batch = batch)!!.sumBy { 1 }.toLong()
+          stream("SELECT i FROM generate_series(1, $1) AS i", rows, batch)!!.sumBy { 1 }.toLong()
         }
       }
     }.map {
@@ -62,7 +63,7 @@ private suspend fun streamPerformance(clients: List<QueryExecutor>) {
 }
 
 
-private suspend fun queryPerformance(clients: List<QueryExecutor>) {
+private suspend fun queryPerformance(clients: List<QueryExecutor>): Unit = coroutineScope {
   val sum = clients.map { client ->
     async {
       val statement = client.prepare("SELECT i FROM generate_series(1, $1) AS i")

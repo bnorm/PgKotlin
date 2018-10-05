@@ -7,29 +7,36 @@ import com.bnorm.pgkotlin.Transaction
 import com.bnorm.pgkotlin.internal.msg.*
 import com.bnorm.pgkotlin.internal.protocol.Postgres10
 import com.bnorm.pgkotlin.internal.protocol.Protocol
+import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.BroadcastChannel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.actor
 import kotlinx.coroutines.channels.produce
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.nio.aConnect
-import kotlinx.coroutines.nio.aRead
-import kotlinx.coroutines.nio.aWrite
-import kotlinx.coroutines.runBlocking
 import okio.Buffer
 import org.intellij.lang.annotations.Language
 import java.io.IOException
 import java.net.InetSocketAddress
+import java.net.SocketAddress
 import java.nio.ByteBuffer
+import java.nio.channels.AsynchronousCloseException
 import java.nio.channels.AsynchronousSocketChannel
+import java.nio.channels.CompletionHandler
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 internal class Connection(
   private val protocol: Protocol,
-  private val channels: MutableMap<String, BroadcastChannel<String>>
-) : PgClient {
+  private val channels: MutableMap<String, BroadcastChannel<String>>,
+  private val job: Job
+) : PgClient, CoroutineScope {
 
   private val statementCount = AtomicInteger(0)
+
+  override val coroutineContext: CoroutineContext
+    get() = Dispatchers.Default + job
 
   override suspend fun prepare(sql: String, name: String?): Statement {
     val actualName = name ?: "statement_"+statementCount.getAndIncrement()
@@ -75,6 +82,8 @@ internal class Connection(
 
   override suspend fun close() {
     protocol.terminate()
+    // TODO(bnorm): join?
+    job.cancel()
   }
 
   companion object {
@@ -92,21 +101,28 @@ internal class Connection(
       username: String = "postgres",
       password: String? = null
     ): Connection {
+      val job = Job()
+      val scope = object : CoroutineScope {
+        override val coroutineContext: CoroutineContext
+          get() = Dispatchers.Default + job
+      }
+
       val socket = AsynchronousSocketChannel.open()
       socket.aConnect(address)
 
-      val requests = sink(socket)
+      coroutineScope { }
+      val requests = scope.sink(socket)
       val channels = mutableMapOf<String, BroadcastChannel<String>>()
-      val responses = source(socket, channels)
+      val responses = scope.source(socket, channels)
 
-      val protocol = Postgres10(requests, responses, { pgEncode() })
+      val protocol = Postgres10(requests, responses, { pgEncode() }, scope)
 
       protocol.startup(username, password, database)
 
-      return Connection(protocol, channels)
+      return Connection(protocol, channels, job)
     }
 
-    private fun sink(socket: AsynchronousSocketChannel) = actor<Request> {
+    private fun CoroutineScope.sink(socket: AsynchronousSocketChannel) = actor<Request> {
       socket.use { socket ->
         val buffer = Buffer()
         val cursor = Buffer.UnsafeCursor()
@@ -119,7 +135,7 @@ internal class Connection(
       }
     }
 
-    private fun source(
+    private fun CoroutineScope.source(
       socket: AsynchronousSocketChannel,
       channels: MutableMap<String, BroadcastChannel<String>>
     ) = produce<Message> {
@@ -185,3 +201,90 @@ private suspend fun AsynchronousSocketChannel.aWrite(
     }
   }
 }
+
+// Pulled from the old JDK NIO coroutine integration module
+
+/**
+ * Performs [AsynchronousSocketChannel.connect] without blocking a thread and resumes when asynchronous operation completes.
+ * This suspending function is cancellable.
+ * If the [Job] of the current coroutine is cancelled or completed while this suspending function is waiting, this function
+ * *closes the underlying channel* and immediately resumes with [CancellationException].
+ */
+suspend fun AsynchronousSocketChannel.aConnect(
+  socketAddress: SocketAddress
+) = suspendCancellableCoroutine<Unit> { cont ->
+  connect(socketAddress, cont, AsyncVoidIOHandler)
+  closeOnCancel(cont)
+}
+
+/**
+ * Performs [AsynchronousSocketChannel.read] without blocking a thread and resumes when asynchronous operation completes.
+ * This suspending function is cancellable.
+ * If the [Job] of the current coroutine is cancelled or completed while this suspending function is waiting, this function
+ * *closes the underlying channel* and immediately resumes with [CancellationException].
+ */
+suspend fun AsynchronousSocketChannel.aRead(
+  buf: ByteBuffer,
+  timeout: Long = 0L,
+  timeUnit: TimeUnit = TimeUnit.MILLISECONDS
+) = suspendCancellableCoroutine<Int> { cont ->
+  read(buf, timeout, timeUnit, cont, asyncIOHandler())
+  closeOnCancel(cont)
+}
+
+/**
+ * Performs [AsynchronousSocketChannel.write] without blocking a thread and resumes when asynchronous operation completes.
+ * This suspending function is cancellable.
+ * If the [Job] of the current coroutine is cancelled or completed while this suspending function is waiting, this function
+ * *closes the underlying channel* and immediately resumes with [CancellationException].
+ */
+suspend fun AsynchronousSocketChannel.aWrite(
+  buf: ByteBuffer,
+  timeout: Long = 0L,
+  timeUnit: TimeUnit = TimeUnit.MILLISECONDS
+) = suspendCancellableCoroutine<Int> { cont ->
+  write(buf, timeout, timeUnit, cont, asyncIOHandler())
+  closeOnCancel(cont)
+}
+
+// ---------------- private details ----------------
+
+private fun java.nio.channels.Channel.closeOnCancel(cont: CancellableContinuation<*>) {
+  cont.invokeOnCancellation {
+    try {
+      close()
+    } catch (ex: Throwable) {
+      // Specification says that it is Ok to call it any time, but reality is different,
+      // so we have just to ignore exception
+    }
+  }
+}
+
+@Suppress("UNCHECKED_CAST")
+private fun <T> asyncIOHandler(): java.nio.channels.CompletionHandler<T, CancellableContinuation<T>> =
+  AsyncIOHandlerAny as java.nio.channels.CompletionHandler<T, CancellableContinuation<T>>
+
+private object AsyncIOHandlerAny : CompletionHandler<Any, CancellableContinuation<Any>> {
+  override fun completed(result: Any, cont: CancellableContinuation<Any>) {
+    cont.resume(result)
+  }
+
+  override fun failed(ex: Throwable, cont: CancellableContinuation<Any>) {
+    // just return if already cancelled and got an expected exception for that case
+    if (ex is AsynchronousCloseException && cont.isCancelled) return
+    cont.resumeWithException(ex)
+  }
+}
+
+private object AsyncVoidIOHandler : CompletionHandler<Void?, CancellableContinuation<Unit>> {
+  override fun completed(result: Void?, cont: CancellableContinuation<Unit>) {
+    cont.resume(Unit)
+  }
+
+  override fun failed(ex: Throwable, cont: CancellableContinuation<Unit>) {
+    // just return if already cancelled and got an expected exception for that case
+    if (ex is AsynchronousCloseException && cont.isCancelled) return
+    cont.resumeWithException(ex)
+  }
+}
+

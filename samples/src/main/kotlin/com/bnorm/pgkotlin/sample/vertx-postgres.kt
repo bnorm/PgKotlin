@@ -4,7 +4,7 @@ import io.reactiverse.pgclient.PgClient
 import io.reactiverse.pgclient.PgPoolOptions
 import io.reactiverse.pgclient.PgResult
 import io.reactiverse.pgclient.Row
-import kotlinx.coroutines.DefaultDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import java.time.Duration
@@ -38,7 +38,7 @@ fun main(args: Array<String>) = runBlocking<Unit> {
 
 private suspend fun queryPerformance(client: PgClient) {
   val sum =
-    withContext(DefaultDispatcher) {
+    withContext(Dispatchers.Default) {
       var sum = 0L
       val end = Instant.now().plus(duration)
       while (Duration.between(end, Instant.now()).isNegative) {
