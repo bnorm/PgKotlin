@@ -27,7 +27,7 @@ jobs:
       # Download and cache dependencies
       - restore_cache:
           keys:
-          - pgkotlin-{{ checksum "build.gradle.kts" }}
+          - pgkotlin-{{ checksum "build.gradle" }}
           # fallback to using the latest cache if no exact match is found
           - pgkotlin-
 
@@ -37,6 +37,6 @@ jobs:
           paths:
             - ~/.gradle
             - ~/.konan
-          key: pgkotlin-{{ checksum "build.gradle.kts" }}
+          key: pgkotlin-{{ checksum "build.gradle" }}
 
       - run: ./gradlew build

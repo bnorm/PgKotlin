@@ -1,0 +1,41 @@
+import org.ajoberstar.gradle.git.release.opinion.Strategies
+
+buildscript {
+  repositories {
+    jcenter()
+    maven { url = "http://kotlin.bintray.com/kotlinx" }
+    maven { url = "http://dl.bintray.com/kotlin/kotlin-eap" }
+  }
+  dependencies {
+    classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:${kotlin_version}")
+  }
+}
+
+plugins {
+  id("base")
+  id("maven-publish")
+
+  id("nebula.release") version "6.3.0"
+  // id("nebula.project") version "3.4.1"
+  id("nebula.maven-publish") version "7.0.1"
+
+  id("com.palantir.circle.style") version "1.1.2"
+}
+
+allprojects {
+  group = "com.bnorm.pgkotlin"
+}
+
+release {
+  defaultVersionStrategy = Strategies.SNAPSHOT
+}
+tasks.release.dependsOn(tasks.build)
+tasks.release.finalizedBy(tasks.publish)
+
+allprojects {
+  repositories {
+    jcenter()
+    maven { url = "http://kotlin.bintray.com/kotlinx" }
+    maven { url = "http://dl.bintray.com/kotlin/kotlin-eap" }
+  }
+}

@@ -8,7 +8,6 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.channels.SendChannel
 import kotlinx.coroutines.channels.produce
-import kotlinx.coroutines.timeunit.TimeUnit
 
 internal class Postgres10(
   private val requests: SendChannel<Request>,
@@ -387,10 +386,8 @@ internal class Postgres10(
   }
 
   private suspend inline fun <reified T> ReceiveChannel<Message>.receive(
-    timeout: Long = 30,
-    timeUnit: TimeUnit = TimeUnit.SECONDS
   ): T {
-    val msg = withTimeout(timeout, timeUnit) { receive() }
+    val msg = withTimeout(30_000) { receive() }
     return msg as? T ?: throw Exception("unexpected=$msg")
   }
 
@@ -427,17 +424,17 @@ internal class Postgres10(
 
     override suspend fun Statement.bind(name: String, vararg params: Any?): Portal {
       require(this is Postgres10Statement)
-      return createStatementPortal((this as Postgres10Statement).name, params.toList(), name)
+      return createStatementPortal(this.name, params.toList(), name)
     }
 
     override suspend fun Statement.stream(vararg params: Any?, batch: Int): Stream? {
       require(this is Postgres10Statement)
-      return streamStatement((this as Postgres10Statement).name, params.toList(), batch)
+      return streamStatement(this.name, params.toList(), batch)
     }
 
     override suspend fun Portal.stream(batch: Int): Stream? {
       require(this is Postgres10Portal)
-      return streamPortal((this as Postgres10Portal).name, batch)
+      return streamPortal(this.name, batch)
     }
   }
 

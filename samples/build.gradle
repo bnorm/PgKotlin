@@ -1,0 +1,12 @@
+plugins {
+  id("org.jetbrains.kotlin.jvm")
+}
+
+dependencies {
+  implementation(project(":pgkotlin"))
+
+  implementation("org.jetbrains.kotlin:kotlin-stdlib-common")
+  implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:${coroutines_version}")
+
+  implementation("io.reactiverse:reactive-pg-client:0.8.0")
+}

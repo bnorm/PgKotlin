@@ -1,0 +1,36 @@
+plugins {
+  id("org.jetbrains.kotlin.multiplatform")
+}
+
+kotlin {
+  sourceSets {
+    commonMain {
+      dependencies {
+        implementation("org.jetbrains.kotlin:kotlin-stdlib-common")
+        implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core-common:${coroutines_version}")
+      }
+    }
+    commonTest {
+      dependencies {
+        implementation("org.jetbrains.kotlin:kotlin-test-common")
+        implementation("org.jetbrains.kotlin:kotlin-test-annotations-common")
+      }
+    }
+    jvmMain {
+      dependencies {
+        implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
+        implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:${coroutines_version}")
+        implementation("com.squareup.okio:okio:2.1.0")
+      }
+    }
+    jvmTest {
+      dependencies {
+        implementation("org.jetbrains.kotlin:kotlin-test-junit")
+      }
+    }
+  }
+
+  targets {
+    fromPreset(presets.jvm, "jvm")
+  }
+}
