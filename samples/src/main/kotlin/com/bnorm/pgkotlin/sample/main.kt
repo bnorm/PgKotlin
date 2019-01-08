@@ -51,7 +51,7 @@ private suspend fun streamPerformance(clients: List<QueryExecutor>): Unit = coro
     sum = clients.map { client ->
       async {
         client.transaction {
-          stream("SELECT i FROM generate_series(1, $1) AS i", rows, batch)!!.sumBy { 1 }.toLong()
+          stream("SELECT i FROM generate_series(1, $1) AS i", rows, batch = batch)!!.sumBy { 1 }.toLong()
         }
       }
     }.map {
