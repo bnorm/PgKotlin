@@ -1,31 +1,22 @@
 package com.bnorm.pgkotlin.internal
 
-import com.bnorm.pgkotlin.PgClient
-import com.bnorm.pgkotlin.Result
-import com.bnorm.pgkotlin.Statement
-import com.bnorm.pgkotlin.Transaction
+import com.bnorm.pgkotlin.*
 import com.bnorm.pgkotlin.internal.msg.*
-import com.bnorm.pgkotlin.internal.protocol.Postgres10
-import com.bnorm.pgkotlin.internal.protocol.Protocol
+import com.bnorm.pgkotlin.internal.protocol.*
 import kotlinx.coroutines.*
-import kotlinx.coroutines.channels.BroadcastChannel
+import kotlinx.coroutines.channels.*
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.channels.actor
-import kotlinx.coroutines.channels.produce
-import okio.Buffer
-import org.intellij.lang.annotations.Language
-import java.io.IOException
-import java.net.InetSocketAddress
-import java.net.SocketAddress
-import java.nio.ByteBuffer
-import java.nio.channels.AsynchronousCloseException
-import java.nio.channels.AsynchronousSocketChannel
+import kotlinx.coroutines.io.*
+import kotlinx.io.core.*
+import org.intellij.lang.annotations.*
+import java.io.*
+import java.net.*
+import java.nio.*
+import java.nio.channels.*
 import java.nio.channels.CompletionHandler
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicInteger
-import kotlin.coroutines.CoroutineContext
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
+import java.util.concurrent.*
+import java.util.concurrent.atomic.*
+import kotlin.coroutines.*
 
 internal class Connection(
   private val protocol: Protocol,
@@ -124,13 +115,14 @@ internal class Connection(
 
     private fun CoroutineScope.sink(socket: AsynchronousSocketChannel) = actor<Request> {
       socket.use { socket ->
-        val buffer = Buffer()
-        val cursor = Buffer.UnsafeCursor()
-
-        for (msg in channel) {
-          msg.writeTo(buffer)
+        for (msg in this@actor.channel) {
+          val packet = buildPacket {
+            msg.writeTo(this)
+          }
           debug { println("sending=$msg") }
-          socket.aWrite(buffer, buffer.size, cursor)
+          packet.readDirect(packet.remaining.toInt()) {
+            socket.aWrite(it)
+          }
         }
       }
     }
@@ -138,66 +130,39 @@ internal class Connection(
     private fun CoroutineScope.source(
       socket: AsynchronousSocketChannel,
       channels: MutableMap<String, BroadcastChannel<String>>
-    ) = produce<Message> {
-      val buffer = Buffer()
-      val cursor = Buffer.UnsafeCursor()
+    ): ReceiveChannel<Message> {
+      val source = writer(Dispatchers.IO) {
+        // kotlinx.io defines a default buffer size of 4096
+        // if something larger is configured, use that value instead, as we want the max throughput?
+        // val size = (System.getProperty("kotlinx.io.buffer.size")?.toIntOrNull() ?: 4096) - 8
 
-      while (socket.isOpen && isActive) {
-        while (buffer.size < 5) socket.aRead(buffer, cursor)
+        while (socket.isOpen && isActive) {
+          channel.writePacket { writeDirect(1) { socket.aRead(it) } }
+          channel.flush()
+        }
+      }
+      return produce<Message> {
+        while (isActive) {
+          with(source.channel) {
+            val id = readByte()
+            val length = (readInt() - 4)
+            val packet = readPacket(length)
+            debug { println("received(id=$id length=$length)") }
 
-        val id = buffer.readByte()
-        val length = (buffer.readInt() - 4).toLong()
-        while (buffer.size < length) socket.aRead(buffer, cursor)
-
-        val msg = factories[id.toInt()]?.decode(buffer)
-        debug { println("received=$msg") }
-        when {
-          msg is ErrorResponse -> throw IOException("${msg.level}: ${msg.message} (${msg.code})")
-          msg is NotificationResponse -> channels[msg.channel]?.send(msg.payload)
-          msg != null -> send(msg)
-          else -> {
-            println("    unknown=${id.toChar()}")
-            buffer.skip(length)
+            val msg = factories[id]?.decode(packet)
+            debug { println("received(msg=$msg, remaining=${packet.remaining})") }
+            when {
+              msg is ErrorResponse -> throw IOException("${msg.level}: ${msg.message} (${msg.code})")
+              msg is NotificationResponse -> channels[msg.channel]?.send(msg.payload)
+              msg != null -> send(msg)
+              else -> {
+                println("unknown(id=$id length=$length)")
+                packet.release()
+              }
+            }
           }
         }
       }
-    }
-  }
-}
-
-private suspend fun AsynchronousSocketChannel.aRead(
-  buffer: Buffer,
-  cursor: Buffer.UnsafeCursor
-): Long {
-  buffer.readAndWriteUnsafe(cursor).use {
-    val oldSize = buffer.size
-    cursor.expandBuffer(8192)
-
-    val read = aRead(ByteBuffer.wrap(cursor.data, cursor.start, 8192))
-
-    if (read == -1) {
-      cursor.resizeBuffer(oldSize)
-    } else {
-      cursor.resizeBuffer(oldSize + read)
-    }
-    return read.toLong()
-  }
-}
-
-private suspend fun AsynchronousSocketChannel.aWrite(
-  buffer: Buffer,
-  byteCount: Long,
-  cursor: Buffer.UnsafeCursor
-) {
-  var remaining = byteCount
-  while (remaining > 0) {
-    buffer.readUnsafe(cursor).use {
-      cursor.seek(0)
-
-      val length = minOf(cursor.end - cursor.start, remaining.toInt())
-      val written = aWrite(ByteBuffer.wrap(cursor.data, cursor.start, length))
-      remaining -= written
-      buffer.skip(written.toLong())
     }
   }
 }

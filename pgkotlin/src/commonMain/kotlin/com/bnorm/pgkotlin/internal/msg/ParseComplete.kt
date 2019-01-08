@@ -1,6 +1,6 @@
 package com.bnorm.pgkotlin.internal.msg
 
-import com.bnorm.pgkotlin.internal.okio.BufferedSource
+import kotlinx.io.core.*
 
 /**
  * See [PostgreSQL message formats](https://www.postgresql.org/docs/current/static/protocol-message-formats.html)
@@ -14,7 +14,7 @@ import com.bnorm.pgkotlin.internal.okio.BufferedSource
  * </pre>
  */
 internal object ParseComplete : Message, Message.Factory<ParseComplete> {
-  override val id: Int = '1'.toInt()
-  override fun decode(source: BufferedSource) = this
+  override val id = '1'.toByte()
+  override fun decode(source: Input) = this
   override fun toString() = "ParseComplete"
 }

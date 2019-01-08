@@ -1,6 +1,6 @@
 package com.bnorm.pgkotlin.internal.msg
 
-import com.bnorm.pgkotlin.internal.okio.BufferedSource
+import kotlinx.io.core.*
 
 /**
  * See [PostgreSQL message formats](https://www.postgresql.org/docs/current/static/protocol-message-formats.html)
@@ -23,15 +23,15 @@ internal data class ErrorResponse(
   val code: String,
   val message: String
 ) : Message {
-  override val id: Int = Companion.id
+  override val id = Companion.id
 
   enum class Level {
     ERROR, FATAL, PANIC, WARNING, NOTICE, DEBUG, INFO, LOG
   }
 
   companion object : Message.Factory<ErrorResponse> {
-    override val id: Int = 'E'.toInt()
-    override fun decode(source: BufferedSource): ErrorResponse {
+    override val id = 'E'.toByte()
+    override fun decode(source: Input): ErrorResponse {
       var level: Level? = null
       var code: String? = null
       var message: String? = null

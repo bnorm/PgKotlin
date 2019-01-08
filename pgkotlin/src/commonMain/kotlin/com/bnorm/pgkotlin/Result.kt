@@ -1,9 +1,8 @@
 package com.bnorm.pgkotlin
 
-import com.bnorm.pgkotlin.internal.okio.ByteString
-import kotlinx.coroutines.channels.ReceiveChannel
+import kotlinx.coroutines.channels.*
 
-interface Row : List<ByteString?>
+interface Row : List<ByteArray?>
 
 interface Result : List<Row>
 

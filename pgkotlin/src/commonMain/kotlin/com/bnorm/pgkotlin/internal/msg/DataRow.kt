@@ -1,7 +1,6 @@
 package com.bnorm.pgkotlin.internal.msg
 
-import com.bnorm.pgkotlin.internal.okio.BufferedSource
-import com.bnorm.pgkotlin.internal.okio.ByteString
+import kotlinx.io.core.*
 
 /**
  * See [PostgreSQL message formats](https://www.postgresql.org/docs/current/static/protocol-message-formats.html)
@@ -22,17 +21,17 @@ import com.bnorm.pgkotlin.internal.okio.ByteString
  * </pre>
  */
 internal data class DataRow(
-  val values: List<ByteString?>
+  val values: List<ByteArray?>
 ) : Message {
-  override val id: Int = Companion.id
+  override val id = Companion.id
 
   companion object : Message.Factory<DataRow> {
-    override val id: Int = 'D'.toInt()
-    override fun decode(source: BufferedSource): DataRow {
+    override val id = 'D'.toByte()
+    override fun decode(source: Input): DataRow {
       val len = source.readShort().toInt()
       val values = List(len) {
         val length = source.readInt()
-        if (length != -1) source.readByteString(length.toLong())
+        if (length != -1) source.readBytes(length)
         else null
       }
       return DataRow(values)

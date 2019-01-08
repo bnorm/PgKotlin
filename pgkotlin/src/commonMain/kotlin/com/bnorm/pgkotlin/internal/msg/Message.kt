@@ -1,10 +1,7 @@
 package com.bnorm.pgkotlin.internal.msg
 
-import com.bnorm.pgkotlin.internal.okio.Buffer
-import com.bnorm.pgkotlin.internal.okio.BufferedSink
-import com.bnorm.pgkotlin.internal.okio.BufferedSource
-import com.bnorm.pgkotlin.internal.okio.IOException
-import kotlinx.coroutines.channels.SendChannel
+import kotlinx.coroutines.channels.*
+import kotlinx.io.core.*
 
 internal val factories = listOf<Message.Factory<*>>(
   Authentication,
@@ -26,24 +23,25 @@ internal val factories = listOf<Message.Factory<*>>(
 ).associateBy { it.id }
 
 internal interface Message {
-  val id: Int
+  val id: Byte
 
   interface Factory<out M : Message> {
-    val id: Int
+    val id: Byte
 
-    fun decode(source: BufferedSource): M
+    fun decode(source: Input): M
   }
 }
 
 internal interface Request : Message {
-  fun encode(sink: BufferedSink)
+  fun encode(sink: Output)
 
-  fun writeTo(sink: BufferedSink) {
+  fun writeTo(sink: Output) {
     if (id > 0) sink.writeByte(id)
-    val buffer = Buffer()
-    encode(buffer)
-    sink.writeInt(buffer.size.toInt() + 4)
-    sink.write(buffer, buffer.size)
+    val packet = buildPacket {
+      encode(this)
+    }
+    sink.writeInt(packet.remaining.toInt() + 4)
+    sink.writePacket(packet)
   }
 }
 
@@ -54,34 +52,32 @@ internal suspend fun SendChannel<Request>.send(vararg requests: Request) {
 private data class RequestBundle(
   val requests: List<Request>
 ) : Request {
-  override val id = -1
+  override val id = (-1).toByte()
 
-  override fun encode(sink: BufferedSink) {
+  override fun encode(sink: Output) {
   }
 
-  override fun writeTo(sink: BufferedSink) {
-    val buffer = Buffer()
-    for (request in requests) {
-      with(request) {
-        if (id > 0) sink.writeByte(id)
-        encode(buffer)
-        sink.writeInt(buffer.size.toInt() + 4)
-        sink.write(buffer, buffer.size)
+  override fun writeTo(sink: Output) {
+    BytePacketBuilder(0).use { builder ->
+      for (request in requests) {
+        with(request) {
+          if (id > 0) sink.writeByte(id)
+          encode(builder)
+          val packet = builder.build()
+          sink.writeInt(packet.remaining.toInt() + 4)
+          sink.writePacket(packet)
+        }
       }
     }
   }
 }
 
-internal fun BufferedSource.readUtf8Terminated(): String {
-  val index = indexOf(0)
-  if (index != -1L) {
-    return readUtf8(index).also { skip(1) }
-  } else {
-    throw IOException("Unterminated string")
-  }
+internal fun Input.readUtf8Terminated(): String {
+  // TODO there's got to be a better way to read the string...
+  return readUTF8UntilDelimiter(0.toChar().toString()).also { discard(1) }
 }
 
-internal fun BufferedSink.writeUtf8Terminated(utf8: String) {
-  writeUtf8(utf8)
+internal fun Output.writeUtf8Terminated(utf8: String) {
+  append(utf8)
   writeByte(0)
 }

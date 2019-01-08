@@ -1,13 +1,11 @@
 package com.bnorm.pgkotlin.internal
 
-import com.bnorm.pgkotlin.PgType
-import okio.ByteString
-import okio.ByteString.Companion.encodeUtf8
+import com.bnorm.pgkotlin.*
+import kotlinx.io.core.*
 import java.time.*
-import java.time.format.DateTimeFormatter
-import java.time.format.DateTimeFormatterBuilder
+import java.time.format.*
 import java.util.*
-import kotlin.reflect.KClass
+import kotlin.reflect.*
 
 private val types = listOf(
   PgBool,
@@ -32,28 +30,28 @@ private val types = listOf(
   PgJsonBinary
 )
 
-private val byType = types.associateBy { it.type }
-private val byOid = types.associateBy { it.oid }
+private val byType: Map<KClass<*>, PgType<*>> = types.associateBy { it.type }
+private val byOid: Map<Int, PgType<*>> = types.associateBy { it.oid }
 
 internal fun Int.toPgType(): PgType<*> = byOid[this] ?: PgDefault
-internal fun Int.pgDecode(value: ByteString): Any = toPgType().decode(value)
+internal fun Int.pgDecode(value: ByteArray): Any = toPgType().decode(value)
 internal fun <T : Any> KClass<out T>.toPgType(): PgType<T> = (byType[this] as? PgType<T>) ?: TODO("type=$this")
-internal fun Any?.pgEncode(): ByteString? =
+internal fun Any?.pgEncode(): ByteArray? =
   if (this == null) null else this::class.toPgType().encode(this)
 
 
 private object PgDate : PgType<LocalDate>(1082, LocalDate::class) {
   val formatter: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE
 
-  override fun decode(value: ByteString) = LocalDate.parse(value.utf8(), formatter)!!
-  override fun encode(value: LocalDate) = value.toString().encodeUtf8()
+  override fun decode(value: ByteArray) = LocalDate.parse(value.toString(Charsets.UTF_8), formatter)!!
+  override fun encode(value: LocalDate): ByteArray = formatter.format(value).toByteArray()
 }
 
 private object PgTime : PgType<LocalTime>(1083, LocalTime::class) {
   val formatter: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_TIME
 
-  override fun decode(value: ByteString) = LocalTime.parse(value.utf8(), formatter)!!
-  override fun encode(value: LocalTime) = formatter.format(value).encodeUtf8()
+  override fun decode(value: ByteArray) = LocalTime.parse(value.toString(Charsets.UTF_8), formatter)!!
+  override fun encode(value: LocalTime) = formatter.format(value).toByteArray()
 }
 
 private object PgTimeStamp : PgType<LocalDateTime>(1114, LocalDateTime::class) {
@@ -65,8 +63,8 @@ private object PgTimeStamp : PgType<LocalDateTime>(1114, LocalDateTime::class) {
     .parseStrict()
     .toFormatter()
 
-  override fun decode(value: ByteString) = LocalDateTime.parse(value.utf8(), formatter)!!
-  override fun encode(value: LocalDateTime) = formatter.format(value).encodeUtf8()
+  override fun decode(value: ByteArray) = LocalDateTime.parse(value.toString(Charsets.UTF_8), formatter)!!
+  override fun encode(value: LocalDateTime) = formatter.format(value).toByteArray()
 }
 
 private object PgTimeStampTz : PgType<ZonedDateTime>(1184, ZonedDateTime::class) {
@@ -77,13 +75,13 @@ private object PgTimeStampTz : PgType<ZonedDateTime>(1184, ZonedDateTime::class)
     .parseStrict()
     .toFormatter()
 
-  override fun decode(value: ByteString) = ZonedDateTime.parse(value.utf8(), formatter)!!
-  override fun encode(value: ZonedDateTime) = formatter.format(value).encodeUtf8()
+  override fun decode(value: ByteArray) = ZonedDateTime.parse(value.toString(Charsets.UTF_8), formatter)!!
+  override fun encode(value: ZonedDateTime) = formatter.format(value).toByteArray()
 }
 
 private object PgInterval : PgType<Duration>(1186, Duration::class) {
-  override fun decode(value: ByteString) = Duration.parse(value.utf8())!! // Period?
-  override fun encode(value: Duration) = value.toString().encodeUtf8()
+  override fun decode(value: ByteArray) = Duration.parse(value.toString(Charsets.UTF_8))!! // Period?
+  override fun encode(value: Duration) = value.toString().toByteArray()
 }
 
 //_timetz	1266
@@ -100,8 +98,8 @@ private object PgInterval : PgType<Duration>(1186, Duration::class) {
 //_cstring	2275
 
 private object PgUuid : PgType<UUID>(2950, UUID::class) {
-  override fun decode(value: ByteString) = UUID.fromString(value.utf8())!!
-  override fun encode(value: UUID) = value.toString().encodeUtf8()
+  override fun decode(value: ByteArray) = UUID.fromString(value.toString(Charsets.UTF_8))!!
+  override fun encode(value: UUID) = value.toString().toByteArray()
 }
 
 //_txid_snapshot	2970
@@ -113,8 +111,8 @@ private object PgUuid : PgType<UUID>(2950, UUID::class) {
 //_regdictionary	3769
 
 private object PgJsonBinary : PgType<String>(3802, String::class) {
-  override fun decode(value: ByteString) = value.utf8()
-  override fun encode(value: String) = value.encodeUtf8()
+  override fun decode(value: ByteArray) = value.toString(Charsets.UTF_8)
+  override fun encode(value: String) = value.toByteArray()
 }
 
 //_int4range	3904

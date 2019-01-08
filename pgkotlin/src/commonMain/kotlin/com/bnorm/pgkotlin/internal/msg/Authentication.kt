@@ -1,7 +1,6 @@
 package com.bnorm.pgkotlin.internal.msg
 
-import com.bnorm.pgkotlin.internal.okio.BufferedSource
-import com.bnorm.pgkotlin.internal.okio.ByteString
+import kotlinx.io.core.*
 
 /**
  * See [PostgreSQL message formats](https://www.postgresql.org/docs/current/static/protocol-message-formats.html)
@@ -36,20 +35,20 @@ import com.bnorm.pgkotlin.internal.okio.ByteString
  */
 internal data class Authentication(
   val success: Boolean,
-  val md5salt: ByteString?
+  val md5salt: ByteArray?
 ) : Message {
-  override val id: Int = Companion.id
+  override val id = Companion.id
 
   companion object : Message.Factory<Authentication> {
     private const val OK = 0
     private const val CLEARTEXT_PASSWORD = 3
     private const val PASSWORD_MD5_CHALLENGE = 5
 
-    override val id: Int = 'R'.toInt()
-    override fun decode(source: BufferedSource) = when (source.readInt()) {
+    override val id = 'R'.toByte()
+    override fun decode(source: Input) = when (source.readInt()) {
       OK -> Authentication(true, null)
       CLEARTEXT_PASSWORD -> Authentication(false, null)
-      PASSWORD_MD5_CHALLENGE -> Authentication(false, source.readByteString(4))
+      PASSWORD_MD5_CHALLENGE -> Authentication(false, source.readBytes(4))
       else -> TODO()
     }
   }

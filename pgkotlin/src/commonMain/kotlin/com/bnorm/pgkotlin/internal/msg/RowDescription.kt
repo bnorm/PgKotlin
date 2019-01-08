@@ -1,6 +1,6 @@
 package com.bnorm.pgkotlin.internal.msg
 
-import com.bnorm.pgkotlin.internal.okio.BufferedSource
+import kotlinx.io.core.*
 
 /**
  * See [PostgreSQL message formats](https://www.postgresql.org/docs/current/static/protocol-message-formats.html)
@@ -33,11 +33,12 @@ import com.bnorm.pgkotlin.internal.okio.BufferedSource
 internal data class RowDescription(
   val columns: List<ColumnDescription>
 ) : Message {
-  override val id: Int = Companion.id
+  override val id = Companion.id
 
   companion object : Message.Factory<RowDescription> {
-    override val id: Int = 'T'.toInt()
-    override fun decode(source: BufferedSource): RowDescription {
+    override val id = 'T'.toByte()
+    override fun decode(source: Input): RowDescription {
+      source as ByteReadPacket
       val len = source.readShort().toInt()
       val columns = List(len) {
         val name = source.readUtf8Terminated()

@@ -1,6 +1,6 @@
 package com.bnorm.pgkotlin.internal.msg
 
-import com.bnorm.pgkotlin.internal.okio.BufferedSink
+import kotlinx.io.core.*
 
 /**
  * See [PostgreSQL message formats](https://www.postgresql.org/docs/current/static/protocol-message-formats.html)
@@ -14,10 +14,10 @@ import com.bnorm.pgkotlin.internal.okio.BufferedSink
  * </pre>
  */
 internal object Sync : Request {
-  override val id: Int = 'S'.toInt()
-  override fun encode(sink: BufferedSink) {}
+  override val id = 'S'.toByte()
+  override fun encode(sink: Output) {}
 
-  override fun writeTo(sink: BufferedSink) {
+  override fun writeTo(sink: Output) {
     sink.writeByte(id)
     sink.writeInt(4)
   }

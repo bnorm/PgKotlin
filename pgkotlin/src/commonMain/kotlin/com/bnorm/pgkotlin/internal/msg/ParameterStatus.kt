@@ -1,6 +1,6 @@
 package com.bnorm.pgkotlin.internal.msg
 
-import com.bnorm.pgkotlin.internal.okio.BufferedSource
+import kotlinx.io.core.*
 
 /**
  * See [PostgreSQL message formats](https://www.postgresql.org/docs/current/static/protocol-message-formats.html)
@@ -21,11 +21,11 @@ internal data class ParameterStatus(
   val name: String,
   val value: String
 ) : Message {
-  override val id: Int = Companion.id
+  override val id = Companion.id
 
   companion object : Message.Factory<ParameterStatus> {
-    override val id: Int = 'S'.toInt()
-    override fun decode(source: BufferedSource): ParameterStatus {
+    override val id = 'S'.toByte()
+    override fun decode(source: Input): ParameterStatus {
       val name = source.readUtf8Terminated()
       val value = source.readUtf8Terminated()
       return ParameterStatus(name, value)

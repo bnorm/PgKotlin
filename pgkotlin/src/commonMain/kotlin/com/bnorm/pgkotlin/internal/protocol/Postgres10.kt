@@ -1,18 +1,15 @@
 package com.bnorm.pgkotlin.internal.protocol
 
 import com.bnorm.pgkotlin.*
-import com.bnorm.pgkotlin.internal.PgProtocolException
+import com.bnorm.pgkotlin.internal.*
 import com.bnorm.pgkotlin.internal.msg.*
-import com.bnorm.pgkotlin.internal.okio.ByteString
 import kotlinx.coroutines.*
-import kotlinx.coroutines.channels.ReceiveChannel
-import kotlinx.coroutines.channels.SendChannel
-import kotlinx.coroutines.channels.produce
+import kotlinx.coroutines.channels.*
 
 internal class Postgres10(
   private val requests: SendChannel<Request>,
   private val responses: ReceiveChannel<Message>,
-  private val encoder: Any?.() -> ByteString?,
+  private val encoder: Any?.() -> ByteArray?,
   private val scope: CoroutineScope
 ) : Protocol {
   override suspend fun startup(
@@ -477,7 +474,7 @@ internal class Postgres10(
 
 private class Postgres10Result(val rows: List<Row>) : Result, List<Row> by rows
 
-private class Postgres10Row(val columns: List<ByteString?>) : Row, List<ByteString?> by columns
+private class Postgres10Row(val columns: List<ByteArray?>) : Row, List<ByteArray?> by columns
 
 private fun DataRow.toRow(): Row {
   return Postgres10Row(values)

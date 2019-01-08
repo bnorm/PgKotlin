@@ -1,7 +1,6 @@
 package com.bnorm.pgkotlin.internal.msg
 
-import com.bnorm.pgkotlin.internal.okio.BufferedSink
-import com.bnorm.pgkotlin.internal.okio.ByteString
+import kotlinx.io.core.*
 
 /**
  * See [PostgreSQL message formats](https://www.postgresql.org/docs/current/static/protocol-message-formats.html)
@@ -45,23 +44,23 @@ import com.bnorm.pgkotlin.internal.okio.ByteString
  *     The result-column format codes. Each must presently be zero (text) or one (binary).
  */
 internal data class Bind(
-  private val params: List<ByteString?>,
+  private val params: List<ByteArray?>,
   private val portal: String = "",
   private val preparedStatement: String = "",
   private val format: FormatType = FormatType.Text,
   private val response: FormatType = FormatType.Text
 ) : Request {
-  override val id: Int = 'B'.toInt()
-  override fun encode(sink: BufferedSink) {
+  override val id = 'B'.toByte()
+  override fun encode(sink: Output) {
     sink.writeUtf8Terminated(portal)
     sink.writeUtf8Terminated(preparedStatement)
     sink.writeShort(1)
     sink.writeShort(format.code)
-    sink.writeShort(params.size)
+    sink.writeShort(params.size.toShort())
     for (param in params) {
       if (param != null) {
         sink.writeInt(param.size)
-        sink.write(param)
+        sink.writeFully(param)
       } else {
         sink.writeInt(-1)
       }
@@ -71,7 +70,7 @@ internal data class Bind(
   }
 }
 
-enum class FormatType(val code: Int) {
+enum class FormatType(val code: Short) {
   Text(0),
   Binary(1),
   ;

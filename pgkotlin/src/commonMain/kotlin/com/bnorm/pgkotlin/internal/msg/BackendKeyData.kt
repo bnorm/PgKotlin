@@ -1,6 +1,6 @@
 package com.bnorm.pgkotlin.internal.msg
 
-import com.bnorm.pgkotlin.internal.okio.BufferedSource
+import kotlinx.io.core.*
 
 /**
  * See [PostgreSQL message formats](https://www.postgresql.org/docs/current/static/protocol-message-formats.html)
@@ -21,11 +21,11 @@ internal data class BackendKeyData(
   val processId: Int,
   val secretKey: Int
 ) : Message {
-  override val id: Int = Companion.id
+  override val id = Companion.id
 
   companion object : Message.Factory<BackendKeyData> {
-    override val id: Int = 'K'.toInt()
-    override fun decode(source: BufferedSource): BackendKeyData {
+    override val id = 'K'.toByte()
+    override fun decode(source: Input): BackendKeyData {
       val processId = source.readInt()
       val secretKey = source.readInt()
       return BackendKeyData(processId, secretKey)

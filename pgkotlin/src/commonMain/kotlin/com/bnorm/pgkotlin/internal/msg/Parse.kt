@@ -1,6 +1,6 @@
 package com.bnorm.pgkotlin.internal.msg
 
-import com.bnorm.pgkotlin.internal.okio.BufferedSink
+import kotlinx.io.core.*
 
 /**
  * See [PostgreSQL message formats](https://www.postgresql.org/docs/current/static/protocol-message-formats.html)
@@ -27,11 +27,11 @@ internal data class Parse(
   private val preparedStatement: String = "",
   private val types: List<Int?> = emptyList()
 ) : Request {
-  override val id: Int = 'P'.toInt()
-  override fun encode(sink: BufferedSink) {
+  override val id = 'P'.toByte()
+  override fun encode(sink: Output) {
     sink.writeUtf8Terminated(preparedStatement)
     sink.writeUtf8Terminated(sql)
-    sink.writeShort(types.size)
+    sink.writeShort(types.size.toShort())
     for (type in types) {
       sink.writeInt(type ?: 0)
     }

@@ -1,7 +1,7 @@
 package com.bnorm.pgkotlin.internal.msg
 
-import com.bnorm.pgkotlin.internal.PgProtocolException
-import com.bnorm.pgkotlin.internal.okio.BufferedSource
+import com.bnorm.pgkotlin.internal.*
+import kotlinx.io.core.*
 
 /**
  * See [PostgreSQL message formats](https://www.postgresql.org/docs/current/static/protocol-message-formats.html)
@@ -19,16 +19,16 @@ import com.bnorm.pgkotlin.internal.okio.BufferedSource
 internal data class ReadyForQuery(
   val tx: TxStatus
 ) : Message {
-  override val id: Int = Companion.id
+  override val id = Companion.id
 
   enum class TxStatus {
     None, Active, Failed
   }
 
   companion object : Message.Factory<ReadyForQuery> {
-    override val id: Int = 'Z'.toInt()
+    override val id = 'Z'.toByte()
 
-    override fun decode(source: BufferedSource): ReadyForQuery {
+    override fun decode(source: Input): ReadyForQuery {
       val char = source.readByte().toChar()
       val txStatus = when (char) {
         'I' -> TxStatus.None

@@ -1,6 +1,6 @@
 package com.bnorm.pgkotlin.internal.msg
 
-import com.bnorm.pgkotlin.internal.okio.BufferedSink
+import kotlinx.io.core.*
 
 /**
  * See [PostgreSQL message formats](https://www.postgresql.org/docs/current/static/protocol-message-formats.html)
@@ -14,12 +14,12 @@ import com.bnorm.pgkotlin.internal.okio.BufferedSink
  * </pre>
  */
 internal object SslRequest : Request {
-  override val id: Int = -1
-  override fun encode(sink: BufferedSink) {
+  override val id: Byte = -1
+  override fun encode(sink: Output) {
     sink.writeInt(80877103)
   }
 
-  override fun writeTo(sink: BufferedSink) {
+  override fun writeTo(sink: Output) {
     sink.writeByte(id)
     sink.writeInt(8)
     encode(sink)

@@ -1,6 +1,6 @@
 package com.bnorm.pgkotlin.internal.msg
 
-import com.bnorm.pgkotlin.internal.okio.BufferedSink
+import kotlinx.io.core.*
 
 /**
  * See [PostgreSQL message formats](https://www.postgresql.org/docs/current/static/protocol-message-formats.html)
@@ -21,14 +21,14 @@ internal data class CancelRequest(
   private val processId: Int,
   private val secretKey: Int
 ) : Request {
-  override val id: Int = -1
-  override fun encode(sink: BufferedSink) {
+  override val id: Byte = -1
+  override fun encode(sink: Output) {
     sink.writeInt(80877102) // cancel request code
     sink.writeInt(processId)
     sink.writeInt(secretKey)
   }
 
-  override fun writeTo(sink: BufferedSink) {
+  override fun writeTo(sink: Output) {
     sink.writeByte(id)
     sink.writeInt(16)
     encode(sink)

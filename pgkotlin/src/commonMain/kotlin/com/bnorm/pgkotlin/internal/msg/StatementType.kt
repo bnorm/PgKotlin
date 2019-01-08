@@ -1,6 +1,6 @@
 package com.bnorm.pgkotlin.internal.msg
 
-enum class StatementType(val code: Int) {
-  Prepared('S'.toInt()),
-  Portal('P'.toInt()),
+enum class StatementType(val code: Byte) {
+  Prepared('S'.toByte()),
+  Portal('P'.toByte()),
 }
