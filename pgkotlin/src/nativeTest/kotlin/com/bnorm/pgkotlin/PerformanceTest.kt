@@ -9,7 +9,7 @@ import kotlin.test.*
 // ./gradlew nativeTest
 class PerformanceTest {
   private val clients = 1
-  private val iterations = 1_000
+  private val iterations = 10
 
   @Test
   fun queryPerf() = runBlocking {
@@ -75,7 +75,7 @@ class PerformanceTest {
     try {
       for (iteration in 1..iterations) {
         println("Stream performance iteration $iteration")
-        streamPerformance(clients, 10L, 5000)
+        streamPerformance(clients, 1_000L, 5000)
       }
     } finally {
       println("Closing clients")
