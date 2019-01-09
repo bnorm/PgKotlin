@@ -101,7 +101,6 @@ internal class Connection(
       val socket = AsynchronousSocketChannel.open()
       socket.aConnect(address)
 
-      coroutineScope { }
       val requests = scope.sink(socket)
       val channels = mutableMapOf<String, BroadcastChannel<String>>()
       val responses = scope.source(socket, channels)
@@ -143,10 +142,10 @@ internal class Connection(
       }
       return produce<Message> {
         while (isActive) {
-          with(source.channel) {
-            val id = readByte()
-            val length = (readInt() - 4)
-            val packet = readPacket(length)
+          with(source) {
+            val id = channel.readByte()
+            val length = (channel.readInt() - 4)
+            val packet = channel.readPacket(length)
             debug { println("received(id=$id length=$length)") }
 
             val msg = factories[id]?.decode(packet)
@@ -168,6 +167,7 @@ internal class Connection(
 }
 
 // Pulled from the old JDK NIO coroutine integration module
+// TODO(bnorm): would it be faster to use our own selector?
 
 /**
  * Performs [AsynchronousSocketChannel.connect] without blocking a thread and resumes when asynchronous operation completes.

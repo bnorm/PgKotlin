@@ -420,18 +420,15 @@ internal class Postgres10(
     }
 
     override suspend fun Statement.bind(name: String, vararg params: Any?): Portal {
-      require(this is Postgres10Statement)
-      return createStatementPortal(this.name, params.toList(), name)
+      return createStatementPortal((this as Postgres10Statement).name, params.toList(), name)
     }
 
     override suspend fun Statement.stream(vararg params: Any?, batch: Int): Stream? {
-      require(this is Postgres10Statement)
-      return streamStatement(this.name, params.toList(), batch)
+      return streamStatement((this as Postgres10Statement).name, params.toList(), batch)
     }
 
     override suspend fun Portal.stream(batch: Int): Stream? {
-      require(this is Postgres10Portal)
-      return streamPortal(this.name, batch)
+      return streamPortal((this as Postgres10Portal).name, batch)
     }
   }
 
