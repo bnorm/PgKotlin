@@ -152,7 +152,6 @@ internal class Connection(
         val msg = factories[id.toInt()]?.decode(buffer)
         debug { println("received=$msg") }
         when {
-          msg is ErrorResponse -> throw IOException("${msg.level}: ${msg.message} (${msg.code})")
           msg is NotificationResponse -> channels[msg.channel]?.send(msg.payload)
           msg != null -> send(msg)
           else -> {

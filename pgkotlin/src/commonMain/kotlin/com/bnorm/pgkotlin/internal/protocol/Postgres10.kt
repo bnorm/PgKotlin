@@ -3,7 +3,7 @@ package com.bnorm.pgkotlin.internal.protocol
 import com.bnorm.pgkotlin.*
 import com.bnorm.pgkotlin.internal.PgProtocolException
 import com.bnorm.pgkotlin.internal.msg.*
-import com.bnorm.pgkotlin.internal.okio.ByteString
+import com.bnorm.pgkotlin.internal.okio.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.channels.SendChannel
@@ -22,10 +22,10 @@ internal class Postgres10(
   ): Handshake {
     // https://www.postgresql.org/docs/current/static/protocol-flow.html#id-1.10.5.7.3
 
-    // TODO(bnorm) SSL handshake?
+    // TODO(bnorm) SSL handshake
     requests.send(StartupMessage(username = username, database = database))
 
-    val authentication = responses.receive() as? Authentication ?: throw PgProtocolException()
+    val authentication = responses.receive<Authentication>()
     if (!authentication.success) {
       if (password != null) {
         requests.send(PasswordMessage.create(username, password, authentication.md5salt))
@@ -39,21 +39,23 @@ internal class Postgres10(
     val parameters = mutableMapOf<String, String>()
     for (msg in responses) {
       if (msg is ReadyForQuery) break
-
-      if (msg is ParameterStatus) {
-        parameters[msg.name] = msg.value
-      }
-      if (msg is BackendKeyData) {
-        processId = msg.processId
-        secretKey = msg.secretKey
+      when (msg) {
+        is ParameterStatus -> parameters[msg.name] = msg.value
+        is BackendKeyData -> {
+          processId = msg.processId
+          secretKey = msg.secretKey
+        }
+        is ErrorResponse -> {
+          responses.receiveUntil<ReadyForQuery>()
+          msg.throwError()
+        }
       }
     }
 
     return Handshake(processId, secretKey, parameters)
   }
 
-  override suspend fun terminate(
-  ) {
+  override suspend fun terminate() {
     // https://www.postgresql.org/docs/current/static/protocol-flow.html#id-1.10.5.7.10
 
     requests.send(Terminate)
@@ -85,6 +87,10 @@ internal class Postgres10(
       when (msg) {
         is DataRow -> results.add(msg.toRow())
         is RowDescription -> description = msg
+        is ErrorResponse -> {
+          responses.receiveUntil<ReadyForQuery>()
+          msg.throwError()
+        }
         else -> throw PgProtocolException("msg=$msg")
       }
     }
@@ -121,6 +127,10 @@ internal class Postgres10(
       }
       when (msg) {
         is DataRow -> results.add(msg.toRow())
+        is ErrorResponse -> {
+          responses.receiveUntil<ReadyForQuery>()
+          msg.throwError()
+        }
         else -> throw PgProtocolException("msg=$msg")
       }
     }
@@ -224,11 +234,7 @@ internal class Postgres10(
 
     responses.receive<BindComplete>()
 
-    val description = responses.receive()
-    if (description !is RowDescription) {
-      throw PgProtocolException("msg=$description")
-    }
-
+    responses.receive<RowDescription>()
     val results = mutableListOf<Row>()
     for (msg in responses) {
       if (msg is CommandComplete) {
@@ -237,6 +243,10 @@ internal class Postgres10(
       }
       when (msg) {
         is DataRow -> results.add(msg.toRow())
+        is ErrorResponse -> {
+          responses.receiveUntil<ReadyForQuery>()
+          msg.throwError()
+        }
         else -> throw PgProtocolException("msg=$msg")
       }
     }
@@ -268,6 +278,10 @@ internal class Postgres10(
         null
       }
       is RowDescription -> createPortal(response, rows)
+      is ErrorResponse -> {
+        responses.receiveUntil<ReadyForQuery>()
+        response.throwError()
+      }
       else -> throw PgProtocolException("msg=$response")
     }
   }
@@ -295,6 +309,10 @@ internal class Postgres10(
         null
       }
       is RowDescription -> createPortal(response, rows)
+      is ErrorResponse -> {
+        responses.receiveUntil<ReadyForQuery>()
+        response.throwError()
+      }
       else -> throw PgProtocolException("msg=$response")
     }
   }
@@ -320,6 +338,10 @@ internal class Postgres10(
         null
       }
       is RowDescription -> createPortal(response, rows)
+      is ErrorResponse -> {
+        responses.receiveUntil<ReadyForQuery>()
+        response.throwError()
+      }
       else -> throw PgProtocolException("msg=$response")
     }
   }
@@ -361,6 +383,10 @@ internal class Postgres10(
             responses.receive<ReadyForQuery>()
             return@produce
           }
+          is ErrorResponse -> {
+            responses.receiveUntil<ReadyForQuery>()
+            msg.throwError()
+          }
           else -> throw PgProtocolException("msg=$msg")
         }
       }
@@ -385,14 +411,16 @@ internal class Postgres10(
     }
   }
 
-  private suspend inline fun <reified T> ReceiveChannel<Message>.receive(
-  ): T {
-    val msg = withTimeout(30_000) { receive() }
-    return msg as? T ?: throw Exception("unexpected=$msg")
+  private suspend inline fun <reified T : Message> ReceiveChannel<Message>.receive(): T {
+    val msg = receive()
+    if (msg is ErrorResponse) {
+      receiveUntil<ReadyForQuery>()
+      msg.throwError()
+    }
+    return msg as? T ?: throw PgProtocolException("unexpected=$msg")
   }
 
-  private suspend inline fun <reified T : Message> ReceiveChannel<Message>.receiveUntil(
-  ): T {
+  private suspend inline fun <reified T : Message> ReceiveChannel<Message>.receiveUntil(): T {
     for (msg in this) {
       if (msg is T) return msg
     }
@@ -482,3 +510,5 @@ private class Postgres10Row(val columns: List<ByteString?>) : Row, List<ByteStri
 private fun DataRow.toRow(): Row {
   return Postgres10Row(values)
 }
+
+private fun ErrorResponse.throwError(): Nothing = throw IOException("$level ($code): $message")

@@ -7,8 +7,10 @@ dependencies {
 
   implementation("org.jetbrains.kotlin:kotlin-stdlib-common")
   implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:${coroutines_version}")
+  implementation("org.jetbrains.kotlinx:kotlinx-coroutines-jdk8:${coroutines_version}")
 
-  implementation("io.reactiverse:reactive-pg-client:0.8.0")
+  implementation("io.reactiverse:reactive-pg-client:0.11.2")
+  implementation('com.github.jasync-sql:jasync-postgresql:0.9.24')
 }
 
 // Configure compile tasks to use Java 1.8
