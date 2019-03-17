@@ -4,17 +4,26 @@ import com.bnorm.pgkotlin.PgClient
 import com.bnorm.pgkotlin.Result
 import com.bnorm.pgkotlin.Statement
 import com.bnorm.pgkotlin.Transaction
-import com.bnorm.pgkotlin.internal.msg.*
+import com.bnorm.pgkotlin.internal.msg.Message
+import com.bnorm.pgkotlin.internal.msg.NotificationResponse
+import com.bnorm.pgkotlin.internal.msg.Request
+import com.bnorm.pgkotlin.internal.msg.factories
 import com.bnorm.pgkotlin.internal.protocol.Postgres10
 import com.bnorm.pgkotlin.internal.protocol.Protocol
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CancellableContinuation
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.BroadcastChannel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.actor
 import kotlinx.coroutines.channels.produce
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.suspendCancellableCoroutine
 import okio.Buffer
 import org.intellij.lang.annotations.Language
-import java.io.IOException
 import java.net.InetSocketAddress
 import java.net.SocketAddress
 import java.nio.ByteBuffer
@@ -39,7 +48,7 @@ internal class Connection(
     get() = Dispatchers.Default + job
 
   override suspend fun prepare(sql: String, name: String?): Statement {
-    val actualName = name ?: "statement_"+statementCount.getAndIncrement()
+    val actualName = name ?: "statement_" + statementCount.getAndIncrement()
     return protocol.createStatement(sql, actualName)
   }
 
@@ -110,12 +119,16 @@ internal class Connection(
       val socket = AsynchronousSocketChannel.open()
       socket.aConnect(address)
 
-      coroutineScope { }
       val requests = scope.sink(socket)
       val channels = mutableMapOf<String, BroadcastChannel<String>>()
       val responses = scope.source(socket, channels)
 
-      val protocol = Postgres10(requests, responses, { pgEncode() }, scope)
+      val sessionFactory = object : PostgresSessionFactory {
+        override suspend fun <R> session(block: suspend PostgresSession.() -> R): R {
+          return block(ChannelPostgresSession(requests, responses))
+        }
+      }
+      val protocol = Postgres10(sessionFactory, { pgEncode() }, scope)
 
       protocol.startup(username, password, database)
 

@@ -47,31 +47,6 @@ internal interface Request : Message {
   }
 }
 
-internal suspend fun SendChannel<Request>.send(vararg requests: Request) {
-  send(RequestBundle(requests.toList()))
-}
-
-private data class RequestBundle(
-  val requests: List<Request>
-) : Request {
-  override val id = -1
-
-  override fun encode(sink: BufferedSink) {
-  }
-
-  override fun writeTo(sink: BufferedSink) {
-    val buffer = Buffer()
-    for (request in requests) {
-      with(request) {
-        if (id > 0) sink.writeByte(id)
-        encode(buffer)
-        sink.writeInt(buffer.size.toInt() + 4)
-        sink.write(buffer, buffer.size)
-      }
-    }
-  }
-}
-
 internal fun BufferedSource.readUtf8Terminated(): String {
   val index = indexOf(0)
   if (index != -1L) {

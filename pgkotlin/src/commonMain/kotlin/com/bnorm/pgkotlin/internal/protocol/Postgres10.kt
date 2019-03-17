@@ -1,17 +1,54 @@
 package com.bnorm.pgkotlin.internal.protocol
 
-import com.bnorm.pgkotlin.*
+import com.bnorm.pgkotlin.Portal
+import com.bnorm.pgkotlin.QueryExecutor
+import com.bnorm.pgkotlin.Result
+import com.bnorm.pgkotlin.Row
+import com.bnorm.pgkotlin.Statement
+import com.bnorm.pgkotlin.Stream
+import com.bnorm.pgkotlin.Transaction
 import com.bnorm.pgkotlin.internal.PgProtocolException
-import com.bnorm.pgkotlin.internal.msg.*
-import com.bnorm.pgkotlin.internal.okio.*
-import kotlinx.coroutines.*
+import com.bnorm.pgkotlin.internal.PostgresSession
+import com.bnorm.pgkotlin.internal.PostgresSessionFactory
+import com.bnorm.pgkotlin.internal.msg.Authentication
+import com.bnorm.pgkotlin.internal.msg.BackendKeyData
+import com.bnorm.pgkotlin.internal.msg.Bind
+import com.bnorm.pgkotlin.internal.msg.BindComplete
+import com.bnorm.pgkotlin.internal.msg.CancelRequest
+import com.bnorm.pgkotlin.internal.msg.Close
+import com.bnorm.pgkotlin.internal.msg.CloseComplete
+import com.bnorm.pgkotlin.internal.msg.CommandComplete
+import com.bnorm.pgkotlin.internal.msg.DataRow
+import com.bnorm.pgkotlin.internal.msg.Describe
+import com.bnorm.pgkotlin.internal.msg.ErrorResponse
+import com.bnorm.pgkotlin.internal.msg.Execute
+import com.bnorm.pgkotlin.internal.msg.NoData
+import com.bnorm.pgkotlin.internal.msg.ParameterStatus
+import com.bnorm.pgkotlin.internal.msg.Parse
+import com.bnorm.pgkotlin.internal.msg.ParseComplete
+import com.bnorm.pgkotlin.internal.msg.PasswordMessage
+import com.bnorm.pgkotlin.internal.msg.PortalSuspended
+import com.bnorm.pgkotlin.internal.msg.Query
+import com.bnorm.pgkotlin.internal.msg.ReadyForQuery
+import com.bnorm.pgkotlin.internal.msg.RowDescription
+import com.bnorm.pgkotlin.internal.msg.StartupMessage
+import com.bnorm.pgkotlin.internal.msg.StatementType
+import com.bnorm.pgkotlin.internal.msg.Sync
+import com.bnorm.pgkotlin.internal.msg.Terminate
+import com.bnorm.pgkotlin.internal.okio.ByteString
+import com.bnorm.pgkotlin.internal.okio.IOException
+import com.bnorm.pgkotlin.internal.receive
+import com.bnorm.pgkotlin.internal.receiveUntil
+import com.bnorm.pgkotlin.internal.send
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.ReceiveChannel
-import kotlinx.coroutines.channels.SendChannel
 import kotlinx.coroutines.channels.produce
+import kotlinx.coroutines.withContext
 
 internal class Postgres10(
-  private val requests: SendChannel<Request>,
-  private val responses: ReceiveChannel<Message>,
+  private val sessionFactory: PostgresSessionFactory,
   private val encoder: Any?.() -> ByteString?,
   private val scope: CoroutineScope
 ) : Protocol {
@@ -19,16 +56,16 @@ internal class Postgres10(
     username: String,
     password: String?,
     database: String
-  ): Handshake {
+  ): Handshake = sessionFactory.session {
     // https://www.postgresql.org/docs/current/static/protocol-flow.html#id-1.10.5.7.3
 
     // TODO(bnorm) SSL handshake
-    requests.send(StartupMessage(username = username, database = database))
+    send(StartupMessage(username = username, database = database))
 
-    val authentication = responses.receive<Authentication>()
+    val authentication = receive<Authentication>()
     if (!authentication.success) {
       if (password != null) {
-        requests.send(PasswordMessage.create(username, password, authentication.md5salt))
+        send(PasswordMessage.create(username, password, authentication.md5salt))
       } else {
         throw IllegalArgumentException("no authentication")
       }
@@ -37,73 +74,61 @@ internal class Postgres10(
     var processId: Int = -1
     var secretKey: Int = -1
     val parameters = mutableMapOf<String, String>()
-    for (msg in responses) {
-      if (msg is ReadyForQuery) break
+    receiveUntil<ReadyForQuery> { msg ->
       when (msg) {
         is ParameterStatus -> parameters[msg.name] = msg.value
         is BackendKeyData -> {
           processId = msg.processId
           secretKey = msg.secretKey
         }
-        is ErrorResponse -> {
-          responses.receiveUntil<ReadyForQuery>()
-          msg.throwError()
-        }
       }
     }
 
-    return Handshake(processId, secretKey, parameters)
+    Handshake(processId, secretKey, parameters)
   }
 
-  override suspend fun terminate() {
+  override suspend fun terminate(): Unit = sessionFactory.session {
     // https://www.postgresql.org/docs/current/static/protocol-flow.html#id-1.10.5.7.10
 
-    requests.send(Terminate)
+    send(Terminate)
   }
 
   override suspend fun cancel(
     handshake: Handshake
-  ) {
+  ): Unit = sessionFactory.session {
     // https://www.postgresql.org/docs/current/static/protocol-flow.html#id-1.10.5.7.10
 
     // Must be performed on a different connection than the original query
-    requests.send(CancelRequest(handshake.processId, handshake.secretKey))
+    send(CancelRequest(handshake.processId, handshake.secretKey))
   }
 
   override suspend fun simpleQuery(
     sql: String
-  ): Result? {
+  ): Result? = sessionFactory.session {
     // https://www.postgresql.org/docs/current/static/protocol-flow.html#id-1.10.5.7.4
 
-    requests.send(Query(sql))
+    send(Query(sql))
 
     val results = mutableListOf<Row>()
     var description: RowDescription? = null
-    for (msg in responses) {
-      if (msg is CommandComplete) {
-        responses.receive<ReadyForQuery>()
-        break
-      }
+    receiveUntil<CommandComplete> { msg ->
       when (msg) {
         is DataRow -> results.add(msg.toRow())
         is RowDescription -> description = msg
-        is ErrorResponse -> {
-          responses.receiveUntil<ReadyForQuery>()
-          msg.throwError()
-        }
         else -> throw PgProtocolException("msg=$msg")
       }
     }
-    return description?.let { Postgres10Result(results) }
+    receive<ReadyForQuery>()
+    description?.let { Postgres10Result(results) }
   }
 
   override suspend fun extendedQuery(
     sql: String,
     params: List<Any?>
-  ): Result? {
+  ): Result? = sessionFactory.session {
     // https://www.postgresql.org/docs/current/static/protocol-flow.html#PROTOCOL-FLOW-EXT-QUERY
 
-    requests.send(
+    send(
       Parse(sql),
       Bind(params.map { it.encoder() }),
       Describe(StatementType.Portal),
@@ -111,30 +136,19 @@ internal class Postgres10(
       Sync
     )
 
-    responses.receive<ParseComplete>()
-    responses.receive<BindComplete>()
-
-    val description = responses.receive()
-    if (description !is RowDescription) {
-      throw PgProtocolException("msg=$description")
-    }
+    receive<ParseComplete>()
+    receive<BindComplete>()
+    receive<RowDescription>()
 
     val results = mutableListOf<Row>()
-    for (msg in responses) {
-      if (msg is CommandComplete) {
-        responses.receive<ReadyForQuery>()
-        break
-      }
+    receiveUntil<CommandComplete> { msg ->
       when (msg) {
         is DataRow -> results.add(msg.toRow())
-        is ErrorResponse -> {
-          responses.receiveUntil<ReadyForQuery>()
-          msg.throwError()
-        }
         else -> throw PgProtocolException("msg=$msg")
       }
     }
-    return Postgres10Result(results)
+    receive<ReadyForQuery>()
+    Postgres10Result(results)
   }
 
   override suspend fun createStatement(
@@ -144,24 +158,26 @@ internal class Postgres10(
     // https://www.postgresql.org/docs/current/static/protocol-flow.html#PROTOCOL-FLOW-EXT-QUERY
     require(name.isNotEmpty()) { "Cannot use unnamed prepared statement" }
 
-    requests.send(
-      Parse(sql, preparedStatement = name),
-      Sync
-    )
+    return sessionFactory.session {
+      send(
+        Parse(sql, preparedStatement = name),
+        Sync
+      )
 
-    responses.receive<ParseComplete>()
-    responses.receive<ReadyForQuery>()
+      receive<ParseComplete>()
+      receive<ReadyForQuery>()
 
-    return Postgres10Statement(name)
+      Postgres10Statement(name)
+    }
   }
 
-  override suspend fun closeStatement(preparedStatement: String) {
-    requests.send(
+  override suspend fun closeStatement(preparedStatement: String) = sessionFactory.session<Unit> {
+    send(
       Close(StatementType.Prepared, preparedStatement),
       Sync
     )
-    responses.receive<CloseComplete>()
-    responses.receive<ReadyForQuery>()
+    receive<CloseComplete>()
+    receive<ReadyForQuery>()
   }
 
   override suspend fun createPortal(
@@ -172,17 +188,19 @@ internal class Postgres10(
     // https://www.postgresql.org/docs/current/static/protocol-flow.html#PROTOCOL-FLOW-EXT-QUERY
     require(name.isNotEmpty()) { "Cannot use unnamed portal" }
 
-    requests.send(
-      Parse(sql),
-      Bind(params.map { it.encoder() }, portal = name),
-      Sync
-    )
+    return sessionFactory.session {
+      send(
+        Parse(sql),
+        Bind(params.map { it.encoder() }, portal = name),
+        Sync
+      )
 
-    responses.receive<ParseComplete>()
-    responses.receive<BindComplete>()
-    responses.receive<ReadyForQuery>()
+      receive<ParseComplete>()
+      receive<BindComplete>()
+      receive<ReadyForQuery>()
 
-    return Postgres10Portal(name)
+      Postgres10Portal(name)
+    }
   }
 
   override suspend fun createStatementPortal(
@@ -193,74 +211,69 @@ internal class Postgres10(
     // https://www.postgresql.org/docs/current/static/protocol-flow.html#PROTOCOL-FLOW-EXT-QUERY
     require(name.isNotEmpty()) { "Cannot use unnamed portal" }
 
-    requests.send(
-      Bind(
-        params.map { it.encoder() },
-        preparedStatement = preparedStatement,
-        portal = name
-      ),
-      Sync
-    )
+    return sessionFactory.session {
+      send(
+        Bind(
+          params.map { it.encoder() },
+          preparedStatement = preparedStatement,
+          portal = name
+        ),
+        Sync
+      )
 
-    responses.receive<BindComplete>()
-    responses.receive<ReadyForQuery>()
+      receive<BindComplete>()
+      receive<ReadyForQuery>()
 
-    return Postgres10Portal(name)
+      Postgres10Portal(name)
+    }
   }
 
   override suspend fun closePortal(
     name: String
-  ) {
-    requests.send(
+  ) = sessionFactory.session<Unit> {
+    send(
       Close(StatementType.Portal, name),
       Sync
     )
-    responses.receive<CloseComplete>()
-    responses.receive<ReadyForQuery>()
+    receive<CloseComplete>()
+    receive<ReadyForQuery>()
   }
 
   override suspend fun execute(
     preparedStatement: String,
     params: List<Any?>
-  ): Result? {
+  ): Result? = sessionFactory.session {
     // https://www.postgresql.org/docs/current/static/protocol-flow.html#PROTOCOL-FLOW-EXT-QUERY
 
-    requests.send(
+    send(
       Bind(params.map { it.encoder() }, preparedStatement = preparedStatement),
       Describe(StatementType.Portal),
       Execute(),
       Sync
     )
 
-    responses.receive<BindComplete>()
+    receive<BindComplete>()
 
-    responses.receive<RowDescription>()
+    receive<RowDescription>()
     val results = mutableListOf<Row>()
-    for (msg in responses) {
-      if (msg is CommandComplete) {
-        responses.receive<ReadyForQuery>()
-        break
-      }
+    receiveUntil<CommandComplete> { msg ->
       when (msg) {
         is DataRow -> results.add(msg.toRow())
-        is ErrorResponse -> {
-          responses.receiveUntil<ReadyForQuery>()
-          msg.throwError()
-        }
         else -> throw PgProtocolException("msg=$msg")
       }
     }
-    return Postgres10Result(results)
+    receive<ReadyForQuery>()
+    Postgres10Result(results)
   }
 
   override suspend fun stream(
     sql: String,
     params: List<Any?>,
     rows: Int
-  ): Stream? {
+  ): Stream? = sessionFactory.session {
     // https://www.postgresql.org/docs/current/static/protocol-flow.html#PROTOCOL-FLOW-EXT-QUERY
 
-    requests.send(
+    send(
       Parse(sql),
       Bind(params.map { it.encoder() }),
       Describe(StatementType.Portal),
@@ -268,20 +281,16 @@ internal class Postgres10(
       Sync
     )
 
-    responses.receive<ParseComplete>()
-    responses.receive<BindComplete>()
-    val response = responses.receive()
-    return when (response) {
+    receive<ParseComplete>()
+    receive<BindComplete>()
+    val response = receive()
+    when (response) {
       is NoData -> {
-        responses.receive<CommandComplete>()
-        responses.receive<ReadyForQuery>()
+        receive<CommandComplete>()
+        receive<ReadyForQuery>()
         null
       }
       is RowDescription -> createPortal(response, rows)
-      is ErrorResponse -> {
-        responses.receiveUntil<ReadyForQuery>()
-        response.throwError()
-      }
       else -> throw PgProtocolException("msg=$response")
     }
   }
@@ -290,29 +299,25 @@ internal class Postgres10(
     preparedStatement: String,
     params: List<Any?>,
     rows: Int
-  ): Stream? {
+  ): Stream? = sessionFactory.session {
     // https://www.postgresql.org/docs/current/static/protocol-flow.html#PROTOCOL-FLOW-EXT-QUERY
 
-    requests.send(
+    send(
       Bind(params.map { it.encoder() }, preparedStatement = preparedStatement),
       Describe(StatementType.Portal),
       Execute(rows = rows),
       Sync
     )
 
-    responses.receive<BindComplete>()
-    val response = responses.receive()
-    return when (response) {
+    receive<BindComplete>()
+    val response = receive()
+    when (response) {
       is NoData -> {
-        responses.receive<CommandComplete>()
-        responses.receive<ReadyForQuery>()
+        receive<CommandComplete>()
+        receive<ReadyForQuery>()
         null
       }
       is RowDescription -> createPortal(response, rows)
-      is ErrorResponse -> {
-        responses.receiveUntil<ReadyForQuery>()
-        response.throwError()
-      }
       else -> throw PgProtocolException("msg=$response")
     }
   }
@@ -324,25 +329,23 @@ internal class Postgres10(
     // https://www.postgresql.org/docs/current/static/protocol-flow.html#PROTOCOL-FLOW-EXT-QUERY
     require(name.isNotEmpty()) { "Cannot use unnamed portal" }
 
-    requests.send(
-      Describe(StatementType.Portal, name = name),
-      Execute(name = name, rows = rows),
-      Sync
-    )
+    return sessionFactory.session {
+      send(
+        Describe(StatementType.Portal, name = name),
+        Execute(name = name, rows = rows),
+        Sync
+      )
 
-    val response = responses.receive()
-    return when (response) {
-      is NoData -> {
-        responses.receive<CommandComplete>()
-        responses.receive<ReadyForQuery>()
-        null
+      val response = receive()
+      when (response) {
+        is NoData -> {
+          receive<CommandComplete>()
+          receive<ReadyForQuery>()
+          null
+        }
+        is RowDescription -> createPortal(response, rows)
+        else -> throw PgProtocolException("msg=$response")
       }
-      is RowDescription -> createPortal(response, rows)
-      is ErrorResponse -> {
-        responses.receiveUntil<ReadyForQuery>()
-        response.throwError()
-      }
-      else -> throw PgProtocolException("msg=$response")
     }
   }
 
@@ -351,7 +354,7 @@ internal class Postgres10(
     return PgTransaction(executor)
   }
 
-  private fun createPortal(
+  private fun PostgresSession.createPortal(
     description: RowDescription,
     rows: Int
   ): Stream {
@@ -361,35 +364,28 @@ internal class Postgres10(
       capacity = (rows - 1).coerceAtLeast(0),
       context = Dispatchers.Unconfined
     ) {
-      for (msg in responses) {
+      receiveUntil<CommandComplete> { msg ->
         when (msg) {
           is DataRow -> {
             send(msg.toRow())
           }
           is PortalSuspended -> {
-            responses.receive<ReadyForQuery>()
-            requests.send(
+            receive<ReadyForQuery>()
+            send(
               Execute(rows = rows),
               Sync
             )
           }
-          is CommandComplete -> {
-            responses.receive<ReadyForQuery>()
-            requests.send(
-              Close(StatementType.Portal),
-              Sync
-            )
-            responses.receive<CloseComplete>()
-            responses.receive<ReadyForQuery>()
-            return@produce
-          }
-          is ErrorResponse -> {
-            responses.receiveUntil<ReadyForQuery>()
-            msg.throwError()
-          }
           else -> throw PgProtocolException("msg=$msg")
         }
       }
+      receive<ReadyForQuery>()
+      send(
+        Close(StatementType.Portal),
+        Sync
+      )
+      receive<CloseComplete>()
+      receive<ReadyForQuery>()
     }
 
     return object : Stream, ReceiveChannel<Row> by data {
@@ -399,32 +395,16 @@ internal class Postgres10(
         if (!isClosedForReceive) {
           cancel()
           withContext(NonCancellable) {
-            requests.send(
+            send(
               Close(StatementType.Portal),
               Sync
             )
-            responses.receiveUntil<CloseComplete>()
-            responses.receive<ReadyForQuery>()
+            receiveUntil<CloseComplete> {}
+            receive<ReadyForQuery>()
           }
         }
       }
     }
-  }
-
-  private suspend inline fun <reified T : Message> ReceiveChannel<Message>.receive(): T {
-    val msg = receive()
-    if (msg is ErrorResponse) {
-      receiveUntil<ReadyForQuery>()
-      msg.throwError()
-    }
-    return msg as? T ?: throw PgProtocolException("unexpected=$msg")
-  }
-
-  private suspend inline fun <reified T : Message> ReceiveChannel<Message>.receiveUntil(): T {
-    for (msg in this) {
-      if (msg is T) return msg
-    }
-    throw PgProtocolException("not found = ${T::class}")
   }
 
   private inner class Postgres10Statement(val name: String) : Statement {
@@ -511,4 +491,4 @@ private fun DataRow.toRow(): Row {
   return Postgres10Row(values)
 }
 
-private fun ErrorResponse.throwError(): Nothing = throw IOException("$level ($code): $message")
+internal fun ErrorResponse.throwError(): Nothing = throw IOException("$level ($code): $message")
