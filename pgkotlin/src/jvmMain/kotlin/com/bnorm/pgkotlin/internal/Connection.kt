@@ -5,6 +5,7 @@ import com.bnorm.pgkotlin.Result
 import com.bnorm.pgkotlin.Statement
 import com.bnorm.pgkotlin.Transaction
 import com.bnorm.pgkotlin.internal.msg.Message
+import com.bnorm.pgkotlin.internal.msg.NoticeResponse
 import com.bnorm.pgkotlin.internal.msg.NotificationResponse
 import com.bnorm.pgkotlin.internal.msg.Request
 import com.bnorm.pgkotlin.internal.msg.factories
@@ -85,8 +86,7 @@ internal class Connection(
     @Language("PostgreSQL") sql: String,
     vararg params: Any?
   ): Result? {
-    return if (params.isEmpty()) protocol.simpleQuery(sql)
-    else protocol.extendedQuery(sql, params.toList())
+    return protocol.extendedQuery(sql, params.toList())
   }
 
   override suspend fun close() {
@@ -124,11 +124,11 @@ internal class Connection(
       val responses = scope.source(socket, channels)
 
       val sessionFactory = object : PostgresSessionFactory {
-        override suspend fun <R> session(block: suspend PostgresSession.() -> R): R {
-          return block(ChannelPostgresSession(requests, responses))
+        override suspend fun create(): PostgresSession {
+          return ChannelPostgresSession(requests, responses)
         }
       }
-      val protocol = Postgres10(sessionFactory, { pgEncode() }, scope)
+      val protocol = Postgres10(sessionFactory)
 
       protocol.startup(username, password, database)
 
@@ -166,6 +166,7 @@ internal class Connection(
         debug { println("received=$msg") }
         when {
           msg is NotificationResponse -> channels[msg.channel]?.send(msg.payload)
+          msg is NoticeResponse -> println("NOTICE! $msg")
           msg != null -> send(msg)
           else -> {
             println("    unknown=${id.toChar()}")

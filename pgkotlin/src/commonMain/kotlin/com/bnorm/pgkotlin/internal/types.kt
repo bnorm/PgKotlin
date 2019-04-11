@@ -4,6 +4,13 @@ import com.bnorm.pgkotlin.PgType
 import com.bnorm.pgkotlin.internal.okio.ByteString
 import com.bnorm.pgkotlin.internal.okio.encodeUtf8
 import com.bnorm.pgkotlin.internal.okio.ofByteString
+import kotlin.reflect.KClass
+
+internal expect fun Int.toPgType(): PgType<*>
+internal fun Int.pgDecode(value: ByteString): Any = toPgType().decode(value)
+internal expect fun <T : Any> KClass<out T>.toPgType(): PgType<T>
+internal fun Any?.pgEncode(): ByteString? =
+  if (this == null) null else this::class.toPgType().encode(this)
 
 internal object PgDefault : PgType<ByteString>(0, ByteString::class) {
   override fun decode(value: ByteString) = value

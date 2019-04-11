@@ -32,7 +32,22 @@ private suspend fun queryPerformance(client: Connection) {
   var sum = 0L
   val end = Instant.now().plus(duration)
   while (Duration.between(end, Instant.now()).isNegative) {
-    client.sendPreparedStatement("SELECT i FROM generate_series(1, 1) AS i").await()
+    client.sendPreparedStatement("SELECT i FROM generate_series(1, ?) AS i", listOf(1)).await()
+//    client.sendPreparedStatement("""select typname,
+//       typnamespace,
+//       typowner,
+//       typlen,
+//       typbyval,
+//       typcategory,
+//       typispreferred,
+//       typisdefined,
+//       typdelim,
+//       typrelid,
+//       typelem,
+//       typarray
+//from pg_type
+//where typtypmod = ?
+//  and typisdefined = ?""", listOf(-1, true)).await()
     sum++
   }
 

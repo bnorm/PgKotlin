@@ -7,5 +7,4 @@ expect interface BufferedSink {
   fun writeUtf8(string: String): BufferedSink
   fun write(byteString: ByteString): BufferedSink
   fun write(source: Buffer, byteCount: Long)
-  fun emit(): BufferedSink
 }

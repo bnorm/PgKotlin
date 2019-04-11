@@ -6,12 +6,17 @@ import com.bnorm.pgkotlin.internal.msg.ReadyForQuery
 import com.bnorm.pgkotlin.internal.msg.Request
 import com.bnorm.pgkotlin.internal.okio.Buffer
 import com.bnorm.pgkotlin.internal.okio.BufferedSink
-import com.bnorm.pgkotlin.internal.protocol.throwError
+import com.bnorm.pgkotlin.internal.okio.IOException
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.channels.SendChannel
 
 internal interface PostgresSessionFactory {
-  suspend fun <R> session(block: suspend PostgresSession.() -> R): R
+  suspend fun create(): PostgresSession
+}
+
+internal suspend inline fun <R> PostgresSessionFactory.session(block: PostgresSession.() -> R): R {
+  val session = create()
+  return session.block()
 }
 
 internal interface PostgresSession {
@@ -31,7 +36,7 @@ internal class ChannelPostgresSession(
         println("after an error: $ready") // TODO
         ready = responses.receive()
       }
-      msg.throwError()
+      throw IOException("${msg.level} (${msg.code}): ${msg.message}")
     }
     return msg
   }

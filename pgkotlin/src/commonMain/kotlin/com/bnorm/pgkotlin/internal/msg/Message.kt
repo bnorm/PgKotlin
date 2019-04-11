@@ -4,7 +4,6 @@ import com.bnorm.pgkotlin.internal.okio.Buffer
 import com.bnorm.pgkotlin.internal.okio.BufferedSink
 import com.bnorm.pgkotlin.internal.okio.BufferedSource
 import com.bnorm.pgkotlin.internal.okio.IOException
-import kotlinx.coroutines.channels.SendChannel
 
 internal val factories = listOf<Message.Factory<*>>(
   Authentication,
@@ -16,6 +15,7 @@ internal val factories = listOf<Message.Factory<*>>(
   EmptyQueryResponse,
   ErrorResponse,
   NoData,
+  NoticeResponse,
   NotificationResponse,
   ParameterDescription,
   ParameterStatus,

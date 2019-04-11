@@ -3,10 +3,14 @@ package com.bnorm.pgkotlin.internal
 import com.bnorm.pgkotlin.PgType
 import okio.ByteString
 import okio.ByteString.Companion.encodeUtf8
-import java.time.*
+import java.time.Duration
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.LocalTime
+import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeFormatterBuilder
-import java.util.*
+import java.util.UUID
 import kotlin.reflect.KClass
 
 private val types = listOf(
@@ -35,11 +39,8 @@ private val types = listOf(
 private val byType = types.associateBy { it.type }
 private val byOid = types.associateBy { it.oid }
 
-internal fun Int.toPgType(): PgType<*> = byOid[this] ?: PgDefault
-internal fun Int.pgDecode(value: ByteString): Any = toPgType().decode(value)
-internal fun <T : Any> KClass<out T>.toPgType(): PgType<T> = (byType[this] as? PgType<T>) ?: TODO("type=$this")
-internal fun Any?.pgEncode(): ByteString? =
-  if (this == null) null else this::class.toPgType().encode(this)
+internal actual fun Int.toPgType(): PgType<*> = byOid[this] ?: PgDefault
+internal actual fun <T : Any> KClass<out T>.toPgType(): PgType<T> = (byType[this] as? PgType<T>) ?: TODO("type=$this")
 
 
 private object PgDate : PgType<LocalDate>(1082, LocalDate::class) {

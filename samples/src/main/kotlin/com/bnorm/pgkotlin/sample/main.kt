@@ -7,9 +7,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.sumBy
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.fold
+import kotlinx.coroutines.flow.reduce
 import kotlinx.coroutines.runBlocking
-import java.io.IOError
-import java.io.IOException
 import java.time.Duration
 import java.time.Instant
 import kotlin.math.roundToInt
@@ -35,7 +35,7 @@ fun main(): Unit = runBlocking(Dispatchers.Default) {
   try {
     for (iteration in 1..iterations) {
       println("Query performance iteration $iteration")
-      queryPerformance(clients[0])
+      queryPerformance(clients)
     }
 
 //    for (iteration in 1..iterations) {
@@ -54,7 +54,7 @@ private suspend fun streamPerformance(clients: List<QueryExecutor>): Unit = coro
     sum = clients.map { client ->
       async {
         client.transaction {
-          stream("SELECT i FROM generate_series(1, $1) AS i", rows, batch = batch)!!.sumBy { 1 }.toLong()
+          stream("SELECT i FROM generate_series(1, $1) AS i", rows, batch = batch)!!.fold(0) { r, _ -> r + 1 }.toLong()
         }
       }
     }.map {
@@ -66,22 +66,25 @@ private suspend fun streamPerformance(clients: List<QueryExecutor>): Unit = coro
 }
 
 
-private suspend fun queryPerformance(client: QueryExecutor): Unit = coroutineScope {
-  val statement = client.prepare("SELECT i FROM generate_series(1, 1) AS i")
-  try {
-    var sum = 0L
-    val end = Instant.now().plus(duration)
-    while (Duration.between(end, Instant.now()).isNegative) {
+private suspend fun queryPerformance(clients: List<QueryExecutor>): Unit = coroutineScope {
+  val sum = clients.map { client ->
+    async {
+      var sum = 0L
+      val statement = client.prepare("SELECT i FROM generate_series(1, 1) AS i")
       try {
-        statement.query()
-      } catch (t: Throwable) {
-        t.printStackTrace()
+        val end = Instant.now().plus(duration)
+        while (Duration.between(end, Instant.now()).isNegative) {
+          statement.query()!!
+          sum += 1
+        }
+      } finally {
+        statement.close()
       }
-      sum++
+      sum
     }
+  }.map {
+    it.await()
+  }.sum()
 
-    println("$sum queries in ${duration.seconds} secs = ${(sum / duration.seconds)} queries/sec")
-  } finally {
-    statement.close()
-  }
+  println("$sum queries in ${duration.seconds} secs = ${(sum / duration.seconds)} queries/sec")
 }

@@ -1,12 +1,18 @@
 package com.bnorm.pgkotlin
 
-import com.bnorm.pgkotlin.internal.okio.ByteString
-import kotlinx.coroutines.channels.ReceiveChannel
+import kotlinx.coroutines.flow.Flow
 
-interface Row : List<ByteString?>
+interface Row : List<Any?>
+interface Column {
+  val name: String
+  val type: PgType<*>
+}
 
-interface Result : List<Row>
+interface Result : List<Row> {
+  val columns: List<Column>
+}
 
-interface Stream : ReceiveChannel<Row> {
-  suspend fun close()
+interface Stream : Flow<Row> {
+  val columns: List<Column>
+  suspend fun cancel()
 }
